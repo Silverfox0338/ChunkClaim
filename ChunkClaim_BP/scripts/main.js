@@ -15,8 +15,8 @@ const OWN_BORDER_STYLE = {
     cornerParticle: "minecraft:basic_flame_particle"
 };
 const OTHER_BORDER_STYLE = {
-    edgeParticle: "chunkclaim:border_blue_particle",
-    cornerParticle: "chunkclaim:border_blue_particle"
+    edgeParticle: "minecraft:soul_fire_flame",
+    cornerParticle: "minecraft:soul_fire_flame"
 };
 
 // ─── Data Layer ───────────────────────────────────────────────────────────────
@@ -194,27 +194,31 @@ function showBorder(player, key, style = OWN_BORDER_STYLE) {
     const drawWest  = !sameOwner(cx - 1, cz);
     const drawEast  = !sameOwner(cx + 1, cz);
 
-    // Calculate surface Y once at the chunk centre instead of per-particle.
-    const baseY = getSurfaceY(dim, x0 + CHUNK_SIZE / 2, z0 + CHUNK_SIZE / 2, refY);
+    // Sample Y at each edge midpoint — 4 reads per chunk, accurate on sloped terrain.
+    const mid = CHUNK_SIZE / 2;
+    const yN = drawNorth ? getSurfaceY(dim, x0 + mid, z0,                  refY) : refY;
+    const yS = drawSouth ? getSurfaceY(dim, x0 + mid, z0 + CHUNK_SIZE - 1, refY) : refY;
+    const yW = drawWest  ? getSurfaceY(dim, x0,                  z0 + mid, refY) : refY;
+    const yE = drawEast  ? getSurfaceY(dim, x0 + CHUNK_SIZE - 1, z0 + mid, refY) : refY;
 
-    const pt = (x, z) => {
-        try { dim.spawnParticle(style.edgeParticle,   { x: x + 0.5, y: baseY, z: z + 0.5 }); } catch {}
+    const pt = (x, z, y) => {
+        try { dim.spawnParticle(style.edgeParticle,   { x: x + 0.5, y, z: z + 0.5 }); } catch {}
     };
-    const corner = (x, z) => {
-        try { dim.spawnParticle(style.cornerParticle, { x: x + 0.5, y: baseY, z: z + 0.5 }); } catch {}
+    const corner = (x, z, ya, yb) => {
+        try { dim.spawnParticle(style.cornerParticle, { x: x + 0.5, y: (ya + yb) / 2, z: z + 0.5 }); } catch {}
     };
 
     for (let i = 0; i < CHUNK_SIZE; i += 2) {
-        if (drawNorth) pt(x0 + i, z0);
-        if (drawSouth) pt(x0 + i, z0 + CHUNK_SIZE - 1);
-        if (drawWest)  pt(x0,                  z0 + i);
-        if (drawEast)  pt(x0 + CHUNK_SIZE - 1, z0 + i);
+        if (drawNorth) pt(x0 + i, z0,                  yN);
+        if (drawSouth) pt(x0 + i, z0 + CHUNK_SIZE - 1, yS);
+        if (drawWest)  pt(x0,                  z0 + i, yW);
+        if (drawEast)  pt(x0 + CHUNK_SIZE - 1, z0 + i, yE);
     }
 
-    if (drawNorth || drawWest) corner(x0,                  z0);
-    if (drawNorth || drawEast) corner(x0 + CHUNK_SIZE - 1, z0);
-    if (drawSouth || drawWest) corner(x0,                  z0 + CHUNK_SIZE - 1);
-    if (drawSouth || drawEast) corner(x0 + CHUNK_SIZE - 1, z0 + CHUNK_SIZE - 1);
+    if (drawNorth || drawWest) corner(x0,                  z0,                  yN, yW);
+    if (drawNorth || drawEast) corner(x0 + CHUNK_SIZE - 1, z0,                  yN, yE);
+    if (drawSouth || drawWest) corner(x0,                  z0 + CHUNK_SIZE - 1, yS, yW);
+    if (drawSouth || drawEast) corner(x0 + CHUNK_SIZE - 1, z0 + CHUNK_SIZE - 1, yS, yE);
 }
 
 function showBorders(player, keys, style = OWN_BORDER_STYLE) {
@@ -331,14 +335,12 @@ async function openManagementUI(player, claim, key) {
     }
 
     if (isOwner && !locked) {
-        form.button("§6⚑ Set Waypoint Here");
-        actions.push(() => openSetWaypointUI(player, claim, key, connected));
-
-        const wpPublic  = claim.waypointPublic ?? false;
-        const wpShared  = (claim.waypointAllowed ?? []).length;
-        const wpStatus  = wpPublic ? "§aPublic" : wpShared > 0 ? `§e${wpShared} shared` : "§7Private";
-        form.button(`§6⬡ Waypoint Access  ${wpStatus}`);
-        actions.push(() => openWaypointAccessUI(player, claim, key, connected));
+        const wpPublic = claim.waypointPublic ?? false;
+        const wpShared = (claim.waypointAllowed ?? []).length;
+        const wpAccess = wpPublic ? "§aPublic" : wpShared > 0 ? `§e${wpShared} shared` : "§7Private";
+        const wpSet    = claim.waypoint ? "§aSet" : "§8None";
+        form.button(`§6⚑ Waypoint  §8(${wpSet}§8, ${wpAccess}§8)`);
+        actions.push(() => openWaypointSettingsUI(player, claim, key, connected));
     }
 
     form.button("§bMy Lands");
@@ -903,6 +905,32 @@ async function openSetWaypointUI(player, claim, key, connected) {
     player.sendMessage(`§a[ChunkClaim] Waypoint set to §f${fx}, ${fy}, ${fz}§a.`);
 }
 
+// ─── Waypoint Settings (sub-menu) ────────────────────────────────────────────
+
+async function openWaypointSettingsUI(player, claim, key, connected) {
+    const isPublic = claim.waypointPublic ?? false;
+    const shared   = (claim.waypointAllowed ?? []).length;
+    const wpAccess = isPublic ? "§aPublic" : shared > 0 ? `§e${shared} shared` : "§7Private";
+
+    let result;
+    try {
+        result = await new ActionFormData()
+            .title("§6§lWaypoint Settings")
+            .body(
+                `§7Waypoint: ${claim.waypoint ? "§aSet" : "§8Not set"}\n` +
+                `§7Access: ${wpAccess}`
+            )
+            .button("§6⚑ Set Waypoint Here")
+            .button(`§6⬡ Waypoint Access  ${wpAccess}`)
+            .button("§c§l✕ Close")
+            .show(player);
+    } catch { return; }
+
+    if (result.canceled || result.selection === 2) return;
+    if (result.selection === 0) openSetWaypointUI(player, claim, key, connected);
+    if (result.selection === 1) openWaypointAccessUI(player, claim, key, connected);
+}
+
 // ─── Waypoint Access ──────────────────────────────────────────────────────────
 
 async function openWaypointAccessUI(player, claim, key, connected) {
@@ -1012,28 +1040,42 @@ async function openRevokeWaypointAccessUI(player, claim, key, connected) {
 
 // ─── Waypoints (My Lands) ─────────────────────────────────────────────────────
 
-function getPlayerRegions(playerId) {
+function getMyRegions(playerId) {
     const claims  = loadClaims();
     const visited = new Set();
     const regions = [];
 
     for (const [key, claim] of Object.entries(claims)) {
-        const isOwner    = claim.owner === playerId;
-        const isCoOwner  = (claim.coOwners       ?? []).some(co => co.id === playerId);
-        const isShared   = (claim.waypointAllowed ?? []).some(p  => p.id  === playerId);
-        const isPublic   = claim.waypointPublic ?? false;
-
-        if (!isOwner && !isCoOwner && !isShared && !isPublic) continue;
+        const isOwner   = claim.owner === playerId;
+        const isCoOwner = (claim.coOwners ?? []).some(co => co.id === playerId);
+        if (!isOwner && !isCoOwner) continue;
         if (visited.has(key)) continue;
 
         const connected = getConnectedClaims(key, claim.owner);
         for (const ck of connected) visited.add(ck);
+        regions.push({ keys: connected, anchor: key, claim, role: isOwner ? "owner" : "coOwner" });
+    }
 
-        let role = "owner";
-        if      (!isOwner && isCoOwner)          role = "coOwner";
-        else if (!isOwner && (isShared || isPublic)) role = isPublic ? "public" : "shared";
+    return regions;
+}
 
-        regions.push({ keys: connected, anchor: key, claim, role });
+function getSharedRegions(playerId) {
+    const claims  = loadClaims();
+    const visited = new Set();
+    const regions = [];
+
+    for (const [key, claim] of Object.entries(claims)) {
+        if (claim.owner === playerId) continue;
+        if ((claim.coOwners ?? []).some(co => co.id === playerId)) continue;
+
+        const isShared = (claim.waypointAllowed ?? []).some(p => p.id === playerId);
+        const isPublic = claim.waypointPublic ?? false;
+        if (!isShared && !isPublic) continue;
+        if (visited.has(key)) continue;
+
+        const connected = getConnectedClaims(key, claim.owner);
+        for (const ck of connected) visited.add(ck);
+        regions.push({ keys: connected, anchor: key, claim, role: isPublic ? "public" : "shared" });
     }
 
     return regions;
@@ -1096,38 +1138,74 @@ function teleportToRegion(player, anchor) {
 }
 
 async function openWaypointUI(player) {
-    const regions = getPlayerRegions(player.id);
-
-    if (regions.length === 0) {
-        player.sendMessage("§7[ChunkClaim] You have no claimed or co-owned land.");
-        return;
-    }
+    const regions  = getMyRegions(player.id);
+    const bodyText = regions.length === 0
+        ? "§7You have no claimed or co-owned land.\n\n§8Check §7Shared & Public§8 for waypoints others shared with you."
+        : "§7Select a region to teleport to:";
 
     const form = new ActionFormData()
         .title("§6§lMy Lands")
-        .body("§7Select a region to teleport to:");
+        .body(bodyText);
 
     for (let i = 0; i < regions.length; i++) {
         const { keys, claim, role } = regions[i];
         const label   = claim.regionName ?? `Region ${i + 1}`;
-        const roleTag = role === "coOwner" ? ` §8[${claim.ownerName}]`
-                      : role === "shared"  ? ` §7[${claim.ownerName}] §8(Shared)`
-                      : role === "public"  ? ` §7[${claim.ownerName}] §8(Public)`
-                      : "";
+        const roleTag = role === "coOwner" ? ` §8[${claim.ownerName}]` : "";
         form.button(`§f${label}${roleTag} §7(${keys.length} chunk${keys.length !== 1 ? "s" : ""})`);
     }
+    form.button("§b↗ Shared & Public Waypoints");
     form.button("§c§l✕ Close");
 
     let result;
     try { result = await form.show(player); } catch { return; }
-    if (result.canceled || result.selection == null || result.selection >= regions.length) return;
+    if (result.canceled || result.selection == null) return;
+
+    const sharedIdx = regions.length;
+    const closeIdx  = regions.length + 1;
+    if (result.selection === closeIdx) return;
+    if (result.selection === sharedIdx) { openSharedWaypointsUI(player); return; }
 
     const { anchor, claim, role } = regions[result.selection];
     try {
         teleportToRegion(player, anchor);
         const label  = claim.regionName ?? `Region ${result.selection + 1}`;
-        const suffix = role !== "owner" ? ` §7(§f${claim.ownerName}§7's land)` : "";
+        const suffix = role === "coOwner" ? ` §7(§f${claim.ownerName}§7's land)` : "";
         player.sendMessage(`§a[ChunkClaim] Teleported to §6${label}§a${suffix}§a.`);
+    } catch {
+        player.sendMessage("§c[ChunkClaim] Teleport failed.");
+    }
+}
+
+async function openSharedWaypointsUI(player) {
+    const regions  = getSharedRegions(player.id);
+    const bodyText = regions.length === 0
+        ? "§7No one has shared a waypoint with you, and no public waypoints exist."
+        : "§7Waypoints shared with you or open to everyone:";
+
+    const form = new ActionFormData()
+        .title("§b§lShared & Public Waypoints")
+        .body(bodyText);
+
+    for (let i = 0; i < regions.length; i++) {
+        const { keys, claim, role } = regions[i];
+        const label   = claim.regionName ?? `${claim.ownerName}'s Land`;
+        const roleTag = role === "public" ? " §8(Public)" : " §8(Shared with you)";
+        form.button(`§f${label} §7[${claim.ownerName}]${roleTag} §7(${keys.length} chunk${keys.length !== 1 ? "s" : ""})`);
+    }
+    form.button("§7◀ My Lands");
+    form.button("§c§l✕ Close");
+
+    let result;
+    try { result = await form.show(player); } catch { return; }
+    if (result.canceled || result.selection == null) return;
+    if (result.selection === regions.length)     { openWaypointUI(player); return; }
+    if (result.selection === regions.length + 1) return;
+
+    const { anchor, claim } = regions[result.selection];
+    try {
+        teleportToRegion(player, anchor);
+        const label = claim.regionName ?? `${claim.ownerName}'s Land`;
+        player.sendMessage(`§a[ChunkClaim] Teleported to §6${label} §7(§f${claim.ownerName}§7's land)§a.`);
     } catch {
         player.sendMessage("§c[ChunkClaim] Teleport failed.");
     }
@@ -1167,7 +1245,7 @@ async function openAdminBrowseLandsUI(player) {
 }
 
 async function openAdminPlayerLandsUI(player, ownerId, ownerName) {
-    const regions = getPlayerRegions(ownerId);
+    const regions = getMyRegions(ownerId).filter(r => r.role === "owner");
 
     if (regions.length === 0) {
         player.sendMessage(`§7[Admin] ${ownerName} has no claims.`);
@@ -1246,7 +1324,7 @@ const GUIDE_TOPICS = [
     },
     {
         title: "§6Unclaiming Land",
-        body:  "§f1. Open Management UI\n2. Tap the §cUnclaim §fbutton\n3. Confirm\n\n§c§lGold is NOT refunded!\n\n§fConnected chunks can be unclaimed all at once.\n\n§aGood luck and happy building!\n§7— Silverfox0338 / ChunkClaim v1.7.0"
+        body:  "§f1. Open Management UI\n2. Tap the §cUnclaim §fbutton\n3. Confirm\n\n§c§lGold is NOT refunded!\n\n§fConnected chunks can be unclaimed all at once.\n\n§aGood luck and happy building!\n§7— Silverfox0338 / ChunkClaim v1.9.0"
     }
 ];
 
@@ -1328,8 +1406,19 @@ async function handleStickUse(player, sneaking = false) {
         if (claim.owner === player.id || isCoOwnerOfClaim(claim, player.id)) {
             openManagementUI(player, claim, key);
         } else {
-            player.sendMessage(`§c[ChunkClaim] This chunk is claimed by §f${claim.ownerName}§c.`);
             showClaimRegion(player, key);
+            const rn = claim.regionName;
+            const title = rn ? `§6${rn} §7[${key}]` : `§7Chunk §f${key}`;
+            let choice;
+            try {
+                choice = await new ActionFormData()
+                    .title("§cClaimed Land")
+                    .body(`${title}\n§7Owner: §f${claim.ownerName}\n\n§7You do not have permission to manage this chunk.`)
+                    .button("§bMy Lands")
+                    .button("§c§l✕ Close")
+                    .show(player);
+            } catch { return; }
+            if (!choice.canceled && choice.selection === 0) openWaypointUI(player);
         }
         return;
     }

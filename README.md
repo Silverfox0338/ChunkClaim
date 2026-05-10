@@ -2,7 +2,7 @@
 
 > A land-claiming add-on for Minecraft Bedrock Edition — protect your 16×16 chunk regions, control who can build, and manage your land from a clean in-game UI.
 
-**Version 1.7.0** · Requires Bedrock 1.21.0+ · Made by [Silverfox0338](https://github.com/Silverfox0338)
+**Version 1.9.0** · Requires Bedrock 1.21.0+ · Made by [Silverfox0338](https://github.com/Silverfox0338)
 
 ---
 
@@ -68,7 +68,7 @@ You can also obtain it from the creative menu (`Items` tab) or via `/give @s chu
 When you enter a claimed chunk, coloured particle borders appear along the edges:
 
 - 🔥 **Flame** = your own land
-- 🔵 **Blue** = another player's land
+- 🔵 **Soul fire** = another player's land
 
 The **action bar** (above your hotbar) always shows the status of the chunk you're standing in:
 
@@ -91,8 +91,7 @@ The **action bar** (above your hotbar) always shows the status of the chunk you'
 | Manage Players | Set custom permissions for a specific online player |
 | Manage Co-Owners | Add or remove co-owners |
 | ✎ Name This Region | Give your land a custom name |
-| ⚑ Set Waypoint Here | Pin your current location as the teleport destination for this region |
-| ⬡ Waypoint Access | Make your waypoint public or share it with specific players |
+| ⚑ Waypoint | Sub-menu: set a waypoint at your current spot, or control who can teleport here |
 | My Lands | Teleport between all your claimed and co-owned regions |
 | Unclaim | Remove your claim from this chunk or the whole region |
 | [?] Help & Guide | Open the full in-game guide |
@@ -161,13 +160,15 @@ See and teleport between all your claimed and co-owned regions:
 2. Tap **My Lands**.
 3. Select a region — you'll be teleported there safely.
 
-Regions are listed with their custom name (or "Region N" if unnamed) and chunk count. Co-owned regions show the owner's name in grey so you can tell them apart.
+**My Lands** shows your owned and co-owned regions. Co-owned regions show the owner's name in grey.
+
+**Shared & Public Waypoints** is a separate tab (button at the bottom of My Lands) for waypoints others have shared with you or made public. Right-clicking in someone else's claim also gives you a **My Lands** button so you can always teleport out — you can never be trapped.
 
 **Setting a custom waypoint:** Stand exactly where you want to land, open the Management UI, and tap **⚑ Set Waypoint Here**. The game checks that the spot is safe (solid ground, two blocks of headroom, no lava or fire) before saving. In the Nether, the roof is always avoided. If no waypoint is set, the game finds the nearest safe spot automatically.
 
-**Sharing a waypoint:** Open the Management UI → **⬡ Waypoint Access** to control who can use your waypoint:
-- **Make Public** — anyone on the server can teleport here via their My Lands list
-- **Grant Access to Player** — give a specific player (without making them co-owner) access to teleport here
+**Sharing a waypoint:** Open the Management UI → **⚑ Waypoint** → **Waypoint Access** to control who can teleport here:
+- **Make Public** — anyone on the server sees it under **Shared & Public Waypoints** in their My Lands
+- **Grant Access to Player** — share with a specific player without making them a co-owner
 - **Revoke Player Access** — remove a player's access
 
 ---
@@ -208,7 +209,8 @@ Owners and co-owners always bypass all restrictions in their own claims.
 | Open management | Right-click with Claim Stick in your land |
 | See whose land it is | Walk into a chunk — action bar updates |
 | Teleport to your land | Management UI → My Lands |
-| Set a teleport waypoint | Stand where you want, Management UI → ⚑ Set Waypoint Here |
+| Set a teleport waypoint | Stand where you want, Management UI → ⚑ Waypoint → Set Waypoint Here |
+| Teleport out of someone's claim | Right-click claim stick → My Lands |
 | Name your land | Management UI → ✎ Name This Region |
 | Add a trusted player | Management UI → Manage Co-Owners |
 | Custom access for one player | Management UI → Manage Players |
