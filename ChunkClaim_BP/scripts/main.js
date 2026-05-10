@@ -76,9 +76,10 @@ function getConnectedClaims(startKey, ownerId) {
     const claims = loadClaims();
     const found  = new Set();
     const queue  = [startKey];
+    let head = 0;
 
-    while (queue.length > 0 && found.size < 500) {
-        const key = queue.shift();
+    while (head < queue.length && found.size < 500) {
+        const key = queue[head++];
         if (found.has(key)) continue;
         if (claims[key]?.owner !== ownerId) continue;
         found.add(key);
@@ -193,17 +194,14 @@ function showBorder(player, key, style = OWN_BORDER_STYLE) {
     const drawWest  = !sameOwner(cx - 1, cz);
     const drawEast  = !sameOwner(cx + 1, cz);
 
+    // Calculate surface Y once at the chunk centre instead of per-particle.
+    const baseY = getSurfaceY(dim, x0 + CHUNK_SIZE / 2, z0 + CHUNK_SIZE / 2, refY);
+
     const pt = (x, z) => {
-        try {
-            const sy = getSurfaceY(dim, x, z, refY);
-            dim.spawnParticle(style.edgeParticle, { x: x + 0.5, y: sy, z: z + 0.5 });
-        } catch {}
+        try { dim.spawnParticle(style.edgeParticle,   { x: x + 0.5, y: baseY, z: z + 0.5 }); } catch {}
     };
     const corner = (x, z) => {
-        try {
-            const sy = getSurfaceY(dim, x, z, refY);
-            dim.spawnParticle(style.cornerParticle, { x: x + 0.5, y: sy, z: z + 0.5 });
-        } catch {}
+        try { dim.spawnParticle(style.cornerParticle, { x: x + 0.5, y: baseY, z: z + 0.5 }); } catch {}
     };
 
     for (let i = 0; i < CHUNK_SIZE; i += 2) {
@@ -330,6 +328,17 @@ async function openManagementUI(player, claim, key) {
     if (isOwner && !locked) {
         form.button("§6✎ Name This Region");
         actions.push(() => openNameRegionUI(player, claim, key, connected));
+    }
+
+    if (isOwner && !locked) {
+        form.button("§6⚑ Set Waypoint Here");
+        actions.push(() => openSetWaypointUI(player, claim, key, connected));
+
+        const wpPublic  = claim.waypointPublic ?? false;
+        const wpShared  = (claim.waypointAllowed ?? []).length;
+        const wpStatus  = wpPublic ? "§aPublic" : wpShared > 0 ? `§e${wpShared} shared` : "§7Private";
+        form.button(`§6⬡ Waypoint Access  ${wpStatus}`);
+        actions.push(() => openWaypointAccessUI(player, claim, key, connected));
     }
 
     form.button("§bMy Lands");
@@ -847,35 +856,250 @@ async function openNameRegionUI(player, claim, key, connected) {
     );
 }
 
+// ─── Set Waypoint ─────────────────────────────────────────────────────────────
+
+async function openSetWaypointUI(player, claim, key, connected) {
+    const pos = player.location;
+    const isNether = player.dimension.id === "minecraft:nether";
+
+    if (isNether && pos.y >= 127) {
+        player.sendMessage("§c[ChunkClaim] Cannot set a waypoint on the nether roof.");
+        return;
+    }
+
+    const safe = findSafeSpot(player.dimension, pos.x, pos.y, pos.z);
+    if (!safe) {
+        player.sendMessage("§c[ChunkClaim] No safe spot found here. Stand on solid, safe ground (not water or lava).");
+        return;
+    }
+
+    const fx = Math.floor(safe.x);
+    const fy = Math.floor(safe.y);
+    const fz = Math.floor(safe.z);
+
+    let result;
+    try {
+        result = await new ActionFormData()
+            .title("§6§lSet Waypoint")
+            .body(
+                `§7Set the teleport destination for this region?\n\n` +
+                `§fX: §7${fx}  Y: §7${fy}  Z: §7${fz}\n\n` +
+                `§8Players will land here when using §7My Lands§8.`
+            )
+            .button("§aSet Waypoint Here")
+            .button("§c§l✕ Cancel")
+            .show(player);
+    } catch { return; }
+
+    if (result.canceled || result.selection !== 0) return;
+
+    const claims = loadClaims();
+    for (const ck of connected) {
+        if (claims[ck]?.owner === claim.owner) {
+            claims[ck].waypoint = { x: safe.x, y: safe.y, z: safe.z };
+        }
+    }
+    saveClaims(claims);
+    player.sendMessage(`§a[ChunkClaim] Waypoint set to §f${fx}, ${fy}, ${fz}§a.`);
+}
+
+// ─── Waypoint Access ──────────────────────────────────────────────────────────
+
+async function openWaypointAccessUI(player, claim, key, connected) {
+    const isPublic = claim.waypointPublic ?? false;
+    const allowed  = claim.waypointAllowed ?? [];
+
+    const on = (b) => b ? "§aON" : "§cOFF";
+    let result;
+    try {
+        result = await new ActionFormData()
+            .title("§6§lWaypoint Access")
+            .body(
+                `§7Control who can teleport to this region via §fMy Lands§7.\n\n` +
+                `§7Public (anyone): ${on(isPublic)}\n` +
+                `§7Shared with: §f${allowed.length} player${allowed.length !== 1 ? "s" : ""}`
+            )
+            .button(isPublic ? "§4Make Private" : "§2Make Public  §7(anyone can TP)")
+            .button("§aGrant Access to Player")
+            .button(`§cRevoke Player Access ${allowed.length > 0 ? `§7(${allowed.length})` : ""}`)
+            .button("§c§l✕ Close")
+            .show(player);
+    } catch { return; }
+
+    if (result.canceled || result.selection === 3) return;
+
+    if (result.selection === 0) {
+        const newPublic = !isPublic;
+        const claims = loadClaims();
+        for (const ck of connected) {
+            if (claims[ck]?.owner === claim.owner) claims[ck].waypointPublic = newPublic;
+        }
+        saveClaims(claims);
+        player.sendMessage(newPublic
+            ? "§a[ChunkClaim] Waypoint is now §2public§a — anyone can teleport here via My Lands."
+            : "§a[ChunkClaim] Waypoint is now §cprivate§a.");
+    } else if (result.selection === 1) {
+        openAddWaypointAccessUI(player, claim, key, connected);
+    } else if (result.selection === 2) {
+        if (allowed.length === 0) {
+            player.sendMessage("§7[ChunkClaim] No players have been granted waypoint access.");
+            return;
+        }
+        openRevokeWaypointAccessUI(player, claim, key, connected);
+    }
+}
+
+async function openAddWaypointAccessUI(player, claim, key, connected) {
+    const existingIds = new Set([
+        claim.owner,
+        ...(claim.coOwners      ?? []).map(co => co.id),
+        ...(claim.waypointAllowed ?? []).map(p  => p.id)
+    ]);
+    const candidates = world.getAllPlayers().filter(p => !existingIds.has(p.id));
+
+    if (candidates.length === 0) {
+        player.sendMessage("§7[ChunkClaim] No eligible online players to grant access to.");
+        return;
+    }
+
+    const form = new ActionFormData()
+        .title("§6§lGrant Waypoint Access")
+        .body("§7Select a player to let them teleport to this region via My Lands.");
+
+    for (const p of candidates) form.button(p.name);
+    form.button("§7Back");
+
+    let result;
+    try { result = await form.show(player); } catch { return; }
+    if (result.canceled || result.selection === candidates.length) return;
+
+    const target = candidates[result.selection];
+    const claims = loadClaims();
+    for (const ck of connected) {
+        if (!claims[ck]) continue;
+        if (!claims[ck].waypointAllowed) claims[ck].waypointAllowed = [];
+        if (!claims[ck].waypointAllowed.some(p => p.id === target.id)) {
+            claims[ck].waypointAllowed.push({ id: target.id, name: target.name });
+        }
+    }
+    saveClaims(claims);
+    player.sendMessage(`§a[ChunkClaim] §f${target.name}§a can now teleport to this region via My Lands.`);
+}
+
+async function openRevokeWaypointAccessUI(player, claim, key, connected) {
+    const allowed = claim.waypointAllowed ?? [];
+
+    const form = new ActionFormData()
+        .title("§6§lRevoke Waypoint Access")
+        .body("§7Select a player to remove their teleport access.");
+
+    for (const p of allowed) form.button(p.name);
+    form.button("§7Back");
+
+    let result;
+    try { result = await form.show(player); } catch { return; }
+    if (result.canceled || result.selection === allowed.length) return;
+
+    const target = allowed[result.selection];
+    const claims = loadClaims();
+    for (const ck of connected) {
+        if (!claims[ck]?.waypointAllowed) continue;
+        claims[ck].waypointAllowed = claims[ck].waypointAllowed.filter(p => p.id !== target.id);
+    }
+    saveClaims(claims);
+    player.sendMessage(`§a[ChunkClaim] §f${target.name}§a's waypoint access removed.`);
+}
+
 // ─── Waypoints (My Lands) ─────────────────────────────────────────────────────
 
-function getPlayerRegions(ownerId) {
+function getPlayerRegions(playerId) {
     const claims  = loadClaims();
-    const owned   = Object.keys(claims).filter(k => claims[k].owner === ownerId);
     const visited = new Set();
     const regions = [];
-    for (const key of owned) {
+
+    for (const [key, claim] of Object.entries(claims)) {
+        const isOwner    = claim.owner === playerId;
+        const isCoOwner  = (claim.coOwners       ?? []).some(co => co.id === playerId);
+        const isShared   = (claim.waypointAllowed ?? []).some(p  => p.id  === playerId);
+        const isPublic   = claim.waypointPublic ?? false;
+
+        if (!isOwner && !isCoOwner && !isShared && !isPublic) continue;
         if (visited.has(key)) continue;
-        const connected = getConnectedClaims(key, ownerId);
+
+        const connected = getConnectedClaims(key, claim.owner);
         for (const ck of connected) visited.add(ck);
-        regions.push({ keys: connected, anchor: key, claim: claims[key] });
+
+        let role = "owner";
+        if      (!isOwner && isCoOwner)          role = "coOwner";
+        else if (!isOwner && (isShared || isPublic)) role = isPublic ? "public" : "shared";
+
+        regions.push({ keys: connected, anchor: key, claim, role });
     }
+
     return regions;
 }
 
+// ─── Safe Teleport Helpers ────────────────────────────────────────────────────
+
+const HARMFUL_BLOCK_FRAGMENTS = ["lava", "fire", "water", "cactus", "magma_block", "wither_rose", "pointed_dripstone"];
+
+function isSafeBlock(typeId) {
+    return !HARMFUL_BLOCK_FRAGMENTS.some(f => typeId.includes(f));
+}
+
+function isSafePosition(dim, x, y, z) {
+    try {
+        const ground = dim.getBlock({ x, y: y - 1, z });
+        const feet   = dim.getBlock({ x, y,       z });
+        const head   = dim.getBlock({ x, y: y + 1, z });
+        if (!ground || !feet || !head) return false;
+        if (!feet.isAir || !head.isAir) return false;
+        if (ground.isAir) return false;
+        return isSafeBlock(ground.typeId);
+    } catch { return false; }
+}
+
+function findSafeSpot(dim, x, startY, z) {
+    const isNether = dim.id === "minecraft:nether";
+    const maxY = isNether ? 122 : 318;
+    const minY = isNether ?   2 : -62;
+    const fx = Math.floor(x);
+    const fz = Math.floor(z);
+    const sy = Math.min(Math.max(Math.floor(startY), minY + 1), maxY);
+
+    for (let y = sy; y >= minY + 1; y--) {
+        if (isSafePosition(dim, fx, y, fz)) return { x: fx + 0.5, y, z: fz + 0.5 };
+    }
+    for (let y = sy + 1; y <= maxY; y++) {
+        if (isSafePosition(dim, fx, y, fz)) return { x: fx + 0.5, y, z: fz + 0.5 };
+    }
+    return null;
+}
+
 function teleportToRegion(player, anchor) {
+    const claim = loadClaims()[anchor];
+    if (claim?.waypoint) {
+        player.teleport(claim.waypoint);
+        return;
+    }
+
     const { cx, cz } = chunkFromKey(anchor);
-    const x = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
-    const z = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
-    const y = getSurfaceY(player.dimension, x, z, player.location.y);
-    player.teleport({ x, y, z });
+    const tx = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
+    const tz = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
+    const dest = findSafeSpot(player.dimension, tx, player.location.y, tz);
+    if (dest) {
+        player.teleport(dest);
+    } else {
+        const y = getSurfaceY(player.dimension, tx, tz, player.location.y);
+        player.teleport({ x: tx, y, z: tz });
+    }
 }
 
 async function openWaypointUI(player) {
     const regions = getPlayerRegions(player.id);
 
     if (regions.length === 0) {
-        player.sendMessage("§7[ChunkClaim] You have no claimed land.");
+        player.sendMessage("§7[ChunkClaim] You have no claimed or co-owned land.");
         return;
     }
 
@@ -884,9 +1108,13 @@ async function openWaypointUI(player) {
         .body("§7Select a region to teleport to:");
 
     for (let i = 0; i < regions.length; i++) {
-        const { keys, claim } = regions[i];
-        const label = claim.regionName ?? `Region ${i + 1}`;
-        form.button(`§f${label} §7(${keys.length} chunk${keys.length !== 1 ? "s" : ""})`);
+        const { keys, claim, role } = regions[i];
+        const label   = claim.regionName ?? `Region ${i + 1}`;
+        const roleTag = role === "coOwner" ? ` §8[${claim.ownerName}]`
+                      : role === "shared"  ? ` §7[${claim.ownerName}] §8(Shared)`
+                      : role === "public"  ? ` §7[${claim.ownerName}] §8(Public)`
+                      : "";
+        form.button(`§f${label}${roleTag} §7(${keys.length} chunk${keys.length !== 1 ? "s" : ""})`);
     }
     form.button("§c§l✕ Close");
 
@@ -894,11 +1122,12 @@ async function openWaypointUI(player) {
     try { result = await form.show(player); } catch { return; }
     if (result.canceled || result.selection == null || result.selection >= regions.length) return;
 
-    const { anchor, claim } = regions[result.selection];
+    const { anchor, claim, role } = regions[result.selection];
     try {
         teleportToRegion(player, anchor);
-        const label = claim.regionName ?? `Region ${result.selection + 1}`;
-        player.sendMessage(`§a[ChunkClaim] Teleported to §6${label}§a.`);
+        const label  = claim.regionName ?? `Region ${result.selection + 1}`;
+        const suffix = role !== "owner" ? ` §7(§f${claim.ownerName}§7's land)` : "";
+        player.sendMessage(`§a[ChunkClaim] Teleported to §6${label}§a${suffix}§a.`);
     } catch {
         player.sendMessage("§c[ChunkClaim] Teleport failed.");
     }
@@ -1017,7 +1246,7 @@ const GUIDE_TOPICS = [
     },
     {
         title: "§6Unclaiming Land",
-        body:  "§f1. Open Management UI\n2. Tap the §cUnclaim §fbutton\n3. Confirm\n\n§c§lGold is NOT refunded!\n\n§fConnected chunks can be unclaimed all at once.\n\n§aGood luck and happy building!\n§7— Silverfox0338 / ChunkClaim v1.6.0"
+        body:  "§f1. Open Management UI\n2. Tap the §cUnclaim §fbutton\n3. Confirm\n\n§c§lGold is NOT refunded!\n\n§fConnected chunks can be unclaimed all at once.\n\n§aGood luck and happy building!\n§7— Silverfox0338 / ChunkClaim v1.7.0"
     }
 ];
 
@@ -1074,7 +1303,7 @@ async function openGuideTopic(player, topic) {
 const _sneakState = new Map();
 const _recentUse  = new Map();
 
-function handleStickUse(player, sneaking = false) {
+async function handleStickUse(player, sneaking = false) {
     const now = Date.now();
     if (now - (_recentUse.get(player.id) ?? 0) < 300) return;
     _recentUse.set(player.id, now);
@@ -1105,7 +1334,22 @@ function handleStickUse(player, sneaking = false) {
         return;
     }
 
-    // Unclaimed — try to claim
+    // Unclaimed — show options first
+    let choice;
+    try {
+        choice = await new ActionFormData()
+            .title("§6§lUnclaimed Land")
+            .body(`§7Chunk §f${key}§7 is unclaimed.\n\nWhat would you like to do?`)
+            .button(`§2✔ Claim This Chunk  §8(${GOLD_COST}x Gold Block)`)
+            .button("§bMy Lands")
+            .button("§c§l✕ Cancel")
+            .show(player);
+    } catch { return; }
+
+    if (choice.canceled || choice.selection === 2) return;
+    if (choice.selection === 1) { openWaypointUI(player); return; }
+
+    // selection === 0: proceed with claiming
     const goldCount = countItems(player, GOLD_BLOCK_ID);
     if (goldCount < GOLD_COST) {
         player.sendMessage(
@@ -1125,7 +1369,10 @@ function handleStickUse(player, sneaking = false) {
         players: {},
         coOwners: [],
         locked: false,
-        regionName: null
+        regionName: null,
+        waypoint: null,
+        waypointPublic: false,
+        waypointAllowed: []
     };
     saveClaims(claims);
 
@@ -1258,7 +1505,7 @@ system.runInterval(() => {
     for (const player of world.getAllPlayers()) {
         _sneakState.set(player.id, player.isSneaking);
     }
-}, 1);
+}, 5);
 
 // ─── Interval: Chunk Entry + Auto Border While Holding Stick ─────────────────
 

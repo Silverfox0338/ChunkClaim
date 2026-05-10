@@ -4,20 +4,20 @@
     "name": "ChunkClaim - Behavior Pack",
     "description": "Land claiming system by Silverfox0338: use a Claim Stick to protect 16x16 chunk regions.",
     "uuid": "f8b3a2c1-d4e5-6789-abcd-ef0123456789",
-    "version": [1, 6, 0],
+    "version": [1, 7, 0],
     "min_engine_version": [1, 21, 0]
   },
   "modules": [
     {
       "type": "data",
       "uuid": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-      "version": [1, 6, 0]
+      "version": [1, 7, 0]
     },
     {
       "type": "script",
       "language": "javascript",
       "uuid": "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
-      "version": [1, 6, 0],
+      "version": [1, 7, 0],
       "entry": "scripts/main.js"
     }
   ],

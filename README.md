@@ -2,7 +2,7 @@
 
 > A land-claiming add-on for Minecraft Bedrock Edition — protect your 16×16 chunk regions, control who can build, and manage your land from a clean in-game UI.
 
-**Version 1.6.0** · Requires Bedrock 1.21.0+ · Made by [Silverfox0338](https://github.com/Silverfox0338)
+**Version 1.7.0** · Requires Bedrock 1.21.0+ · Made by [Silverfox0338](https://github.com/Silverfox0338)
 
 ---
 
@@ -54,7 +54,7 @@ You can also obtain it from the creative menu (`Items` tab) or via `/give @s chu
 
 1. Hold the Claim Stick.
 2. Stand inside the chunk you want to own.
-3. **Right-click.**
+3. **Right-click.** A menu appears — choose **Claim This Chunk** or **My Lands**.
 4. If the chunk is free and you have **2 Gold Blocks** in your inventory, it's claimed — Gold Blocks are consumed.
 
 > ⚠️ Gold Blocks are **not refunded** if you later unclaim.
@@ -91,7 +91,9 @@ The **action bar** (above your hotbar) always shows the status of the chunk you'
 | Manage Players | Set custom permissions for a specific online player |
 | Manage Co-Owners | Add or remove co-owners |
 | ✎ Name This Region | Give your land a custom name |
-| My Lands | Teleport between all your regions |
+| ⚑ Set Waypoint Here | Pin your current location as the teleport destination for this region |
+| ⬡ Waypoint Access | Make your waypoint public or share it with specific players |
+| My Lands | Teleport between all your claimed and co-owned regions |
 | Unclaim | Remove your claim from this chunk or the whole region |
 | [?] Help & Guide | Open the full in-game guide |
 
@@ -133,8 +135,9 @@ Co-owners are trusted players who help manage your claim. They can:
 - ✅ Edit guest permissions
 - ✅ Set per-player permissions
 - ✅ Add and remove other co-owners
+- ✅ Teleport to co-owned land via **My Lands**
 
-They **cannot** unclaim your land.
+They **cannot** unclaim your land or change the waypoint.
 
 Add a co-owner: Management UI → **Manage Co-Owners** → **Add Co-Owner** → select the player.  
 Changes apply to all connected chunks instantly.
@@ -152,13 +155,20 @@ The name appears in your **action bar** when anyone enters the chunk, and in you
 
 ## My Lands (Waypoints)
 
-See and teleport between all your claimed regions:
+See and teleport between all your claimed and co-owned regions:
 
 1. Open the Management UI in any of your chunks.
 2. Tap **My Lands**.
-3. Select a region — you'll be teleported to its centre.
+3. Select a region — you'll be teleported there safely.
 
-Regions are listed with their custom name (or "Region N" if unnamed) and chunk count.
+Regions are listed with their custom name (or "Region N" if unnamed) and chunk count. Co-owned regions show the owner's name in grey so you can tell them apart.
+
+**Setting a custom waypoint:** Stand exactly where you want to land, open the Management UI, and tap **⚑ Set Waypoint Here**. The game checks that the spot is safe (solid ground, two blocks of headroom, no lava or fire) before saving. In the Nether, the roof is always avoided. If no waypoint is set, the game finds the nearest safe spot automatically.
+
+**Sharing a waypoint:** Open the Management UI → **⬡ Waypoint Access** to control who can use your waypoint:
+- **Make Public** — anyone on the server can teleport here via their My Lands list
+- **Grant Access to Player** — give a specific player (without making them co-owner) access to teleport here
+- **Revoke Player Access** — remove a player's access
 
 ---
 
@@ -198,6 +208,7 @@ Owners and co-owners always bypass all restrictions in their own claims.
 | Open management | Right-click with Claim Stick in your land |
 | See whose land it is | Walk into a chunk — action bar updates |
 | Teleport to your land | Management UI → My Lands |
+| Set a teleport waypoint | Stand where you want, Management UI → ⚑ Set Waypoint Here |
 | Name your land | Management UI → ✎ Name This Region |
 | Add a trusted player | Management UI → Manage Co-Owners |
 | Custom access for one player | Management UI → Manage Players |
