@@ -1,0 +1,64 @@
+{
+  "namespace": "hud",
+  "chunkclaim_hud": {
+    "type": "label",
+    "text": "#text",
+    "shadow": true,
+    "text_alignment": "right",
+    "anchor_from": "top_right",
+    "anchor_to": "top_right",
+    "offset": [-12, 12],
+    "layer": 10,
+    "controls": [
+      {
+        "data_control": {
+          "type": "panel",
+          "size": [0, 0],
+          "property_bag": {
+            "#preserved_text": ""
+          },
+          "bindings": [
+            {
+              "binding_name": "#hud_title_text_string"
+            },
+            {
+              "binding_name": "#hud_title_text_string",
+              "binding_name_override": "#preserved_text",
+              "binding_condition": "visibility_changed"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not (#hud_title_text_string = #preserved_text) and not ((#hud_title_text_string - 'CC_HUD:') = #hud_title_text_string))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      }
+    ],
+    "bindings": [
+      {
+        "binding_type": "view",
+        "source_control_name": "data_control",
+        "source_property_name": "(#preserved_text - 'CC_HUD:')",
+        "target_property_name": "#text"
+      },
+      {
+        "binding_type": "view",
+        "source_control_name": "data_control",
+        "source_property_name": "(not (#preserved_text = 'CC_HUD:OFF'))",
+        "target_property_name": "#visible"
+      }
+    ]
+  },
+  "root_panel": {
+    "modifications": [
+      {
+        "array_name": "controls",
+        "operation": "insert_front",
+        "value": {
+          "chunkclaim_hud@hud.chunkclaim_hud": {}
+        }
+      }
+    ]
+  }
+}
