@@ -1,4 +1,12 @@
-import { world, system, Player, ItemStack, EquipmentSlot } from "@minecraft/server";
+import {
+    world,
+    system,
+    Player,
+    ItemStack,
+    CommandPermissionLevel,
+    CustomCommandParamType,
+    CustomCommandStatus
+} from "@minecraft/server";
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -8,16 +16,166 @@ const GOLD_BLOCK_ID  = "minecraft:gold_block";
 const GOLD_COST      = 2;
 const CHUNK_SIZE     = 16;
 const DATA_KEY       = "chunkclaim:data";
-const PREVIEW_RADIUS_CHUNKS = 2;
-const BORDER_PREVIEW_INTERVAL_MS = 1000;
-const OWN_BORDER_STYLE = {
-    edgeParticle: "minecraft:basic_flame_particle",
-    cornerParticle: "minecraft:basic_flame_particle"
+const LANGUAGE_PROPERTY = "chunkclaim:language";
+const LANGUAGE_OPTIONS = ["en", "es", "fr", "ja", "zh_CN"];
+const LANGUAGE_NAMES = {
+    en: "English",
+    es: "Español",
+    fr: "Français",
+    ja: "日本語",
+    zh_CN: "简体中文"
 };
-const OTHER_BORDER_STYLE = {
-    edgeParticle: "minecraft:soul_fire_flame",
-    cornerParticle: "minecraft:soul_fire_flame"
+const NOTIFICATION_PROPERTY = "chunkclaim:notifications";
+const NOTIFICATION_MODES = ["all", "claimed", "off"];
+const STATUS_HUD_PROPERTY = "chunkclaim:status_hud";
+const STATUS_HUD_MODES = ["on", "off"];
+const _playerLanguages = new Map();
+const _playerNotifications = new Map();
+const _playerStatusHud = new Map();
+const TRANSLATIONS = {
+    en: {
+        language: "Language",
+        languageTitle: "Language",
+        languageBody: "Choose the language used by ChunkClaim menus.",
+        languageSaved: "[ChunkClaim] Language updated.",
+        claimManagement: "Claim Management",
+        owner: "Owner",
+        coOwners: "Co-owners",
+        guestPermissions: "Guest permissions",
+        editGuestPermissions: "Edit Guest Permissions",
+        managePeople: "Manage People",
+        chooseManage: "Choose who you want to manage.",
+        managePlayers: "Manage Players",
+        manageCoOwners: "Manage Co-Owners",
+        nameRegion: "Name This Region",
+        waypoint: "Waypoint",
+        myLands: "My Lands",
+        helpGuide: "Help & Guide",
+        close: "Close",
+        locked: "LOCKED",
+        allowBreaking: "Allow Breaking Blocks",
+        allowPlacing: "Allow Placing Blocks",
+        allowContainers: "Allow Opening Containers / Chests",
+        allowDoors: "Allow Using Doors / Gates / Trapdoors",
+        allowButtons: "Allow Using Buttons / Levers",
+        allowExplosions: "Allow TNT / Explosions",
+        breakBlocks: "Break blocks",
+        placeBlocks: "Place blocks",
+        containers: "Open containers",
+        doors: "Use doors/gates",
+        buttons: "Buttons/levers",
+        explosions: "Explosions/TNT",
+        notifications: "Notifications",
+        notificationTitle: "Land Notifications",
+        notificationBody: "Choose when ChunkClaim shows land status messages.",
+        notificationAll: "All land changes",
+        notificationClaimed: "Claimed land only",
+        notificationOff: "Turn notifications off",
+        notificationSaved: "[ChunkClaim] Notification setting updated."
+    },
+    es: {
+        language: "Idioma",
+        languageTitle: "Idioma",
+        languageBody: "Elige el idioma de los menus de ChunkClaim.",
+        languageSaved: "[ChunkClaim] Idioma actualizado.",
+        claimManagement: "Gestion de Terreno",
+        owner: "Propietario",
+        coOwners: "Copropietarios",
+        guestPermissions: "Permisos de visitantes",
+        editGuestPermissions: "Editar permisos de visitantes",
+        managePeople: "Gestionar personas",
+        chooseManage: "Elige a quien quieres gestionar.",
+        managePlayers: "Gestionar jugadores",
+        manageCoOwners: "Gestionar copropietarios",
+        nameRegion: "Nombrar esta region",
+        waypoint: "Punto de ruta",
+        myLands: "Mis terrenos",
+        helpGuide: "Ayuda y guia",
+        close: "Cerrar",
+        locked: "BLOQUEADO",
+        allowBreaking: "Permitir romper bloques",
+        allowPlacing: "Permitir colocar bloques",
+        allowContainers: "Permitir abrir cofres y contenedores",
+        allowDoors: "Permitir usar puertas, vallas y trampillas",
+        allowButtons: "Permitir usar botones y palancas",
+        allowExplosions: "Permitir TNT y explosiones",
+        breakBlocks: "Romper bloques",
+        placeBlocks: "Colocar bloques",
+        containers: "Abrir contenedores",
+        doors: "Usar puertas y vallas",
+        buttons: "Botones y palancas",
+        explosions: "Explosiones y TNT",
+        notifications: "Notificaciones",
+        notificationTitle: "Notificaciones de terreno",
+        notificationBody: "Elige cuando ChunkClaim muestra mensajes de terreno.",
+        notificationAll: "Todos los cambios de terreno",
+        notificationClaimed: "Solo terreno reclamado",
+        notificationOff: "Desactivar notificaciones",
+        notificationSaved: "[ChunkClaim] Configuracion de notificaciones actualizada."
+    },
+    fr: {
+        language: "Langue", languageTitle: "Langue", languageBody: "Choisissez la langue des menus ChunkClaim.", languageSaved: "[ChunkClaim] Langue mise a jour.",
+        claimManagement: "Gestion de terrain", owner: "Proprietaire", coOwners: "Coproprietaires", guestPermissions: "Permissions des visiteurs", editGuestPermissions: "Modifier les permissions", managePeople: "Gerer les personnes", chooseManage: "Choisissez ce que vous voulez gerer.", managePlayers: "Gerer les joueurs", manageCoOwners: "Gerer les coproprietaires", nameRegion: "Nommer cette region", waypoint: "Point de passage", myLands: "Mes terrains", helpGuide: "Aide et guide", close: "Fermer", locked: "VERROUILLE",
+        allowBreaking: "Autoriser la destruction", allowPlacing: "Autoriser la pose de blocs", allowContainers: "Autoriser les coffres et conteneurs", allowDoors: "Autoriser portes, portails et trappes", allowButtons: "Autoriser boutons et leviers", allowExplosions: "Autoriser TNT et explosions",
+        breakBlocks: "Casser des blocs", placeBlocks: "Poser des blocs", containers: "Ouvrir les conteneurs", doors: "Utiliser portes et portails", buttons: "Boutons et leviers", explosions: "Explosions et TNT",
+        notifications: "Notifications", notificationTitle: "Notifications de terrain", notificationBody: "Choisissez quand ChunkClaim affiche le statut du terrain.", notificationAll: "Tous les changements de terrain", notificationClaimed: "Terrains reclames uniquement", notificationOff: "Desactiver les notifications", notificationSaved: "[ChunkClaim] Parametre de notification mis a jour."
+    },
+    ja: {
+        language: "言語", languageTitle: "言語", languageBody: "ChunkClaim メニューの言語を選択します。", languageSaved: "[ChunkClaim] 言語を更新しました。",
+        claimManagement: "土地管理", owner: "所有者", coOwners: "共同所有者", guestPermissions: "訪問者の権限", editGuestPermissions: "訪問者の権限を編集", managePeople: "プレイヤー管理", chooseManage: "管理する項目を選択してください。", managePlayers: "プレイヤーを管理", manageCoOwners: "共同所有者を管理", nameRegion: "地域に名前を付ける", waypoint: "ウェイポイント", myLands: "自分の土地", helpGuide: "ヘルプとガイド", close: "閉じる", locked: "ロック中",
+        allowBreaking: "ブロック破壊を許可", allowPlacing: "ブロック設置を許可", allowContainers: "チェストとコンテナを許可", allowDoors: "ドア、ゲート、トラップドアを許可", allowButtons: "ボタンとレバーを許可", allowExplosions: "TNT と爆発を許可",
+        breakBlocks: "ブロックを壊す", placeBlocks: "ブロックを置く", containers: "コンテナを開く", doors: "ドアとゲートを使う", buttons: "ボタンとレバー", explosions: "爆発と TNT",
+        notifications: "通知", notificationTitle: "土地の通知", notificationBody: "土地の状態を表示するタイミングを選択します。", notificationAll: "すべての土地変更", notificationClaimed: "所有地のみ", notificationOff: "通知をオフにする", notificationSaved: "[ChunkClaim] 通知設定を更新しました。"
+    },
+    zh_CN: {
+        language: "语言", languageTitle: "语言", languageBody: "选择 ChunkClaim 菜单使用的语言。", languageSaved: "[ChunkClaim] 语言已更新。",
+        claimManagement: "领地管理", owner: "所有者", coOwners: "共同所有者", guestPermissions: "访客权限", editGuestPermissions: "编辑访客权限", managePeople: "管理人员", chooseManage: "选择要管理的项目。", managePlayers: "管理玩家", manageCoOwners: "管理共同所有者", nameRegion: "命名此区域", waypoint: "传送点", myLands: "我的领地", helpGuide: "帮助与指南", close: "关闭", locked: "已锁定",
+        allowBreaking: "允许破坏方块", allowPlacing: "允许放置方块", allowContainers: "允许打开箱子和容器", allowDoors: "允许使用门、栅栏门和活板门", allowButtons: "允许使用按钮和拉杆", allowExplosions: "允许 TNT 和爆炸",
+        breakBlocks: "破坏方块", placeBlocks: "放置方块", containers: "打开容器", doors: "使用门和栅栏门", buttons: "按钮和拉杆", explosions: "爆炸和 TNT",
+        notifications: "通知", notificationTitle: "领地通知", notificationBody: "选择 ChunkClaim 显示领地状态的时机。", notificationAll: "所有领地变化", notificationClaimed: "仅已认领领地", notificationOff: "关闭通知", notificationSaved: "[ChunkClaim] 通知设置已更新。"
+    }
 };
+
+function getLanguage(player) {
+    const cachedLanguage = _playerLanguages.get(player.id);
+    if (cachedLanguage) return cachedLanguage;
+    try {
+        const language = player.getDynamicProperty(LANGUAGE_PROPERTY);
+        if (LANGUAGE_OPTIONS.includes(language)) {
+            _playerLanguages.set(player.id, language);
+            return language;
+        }
+    } catch {}
+    return "en";
+}
+
+function t(player, key) {
+    const language = getLanguage(player);
+    return TRANSLATIONS[language][key] ?? TRANSLATIONS.en[key] ?? key;
+}
+
+function getNotificationMode(player) {
+    const cachedMode = _playerNotifications.get(player.id);
+    if (cachedMode) return cachedMode;
+    try {
+        const mode = player.getDynamicProperty(NOTIFICATION_PROPERTY);
+        if (NOTIFICATION_MODES.includes(mode)) {
+            _playerNotifications.set(player.id, mode);
+            return mode;
+        }
+    } catch {}
+    return "all";
+}
+
+function setNotificationMode(player, mode) {
+    if (!NOTIFICATION_MODES.includes(mode)) return;
+    _playerNotifications.set(player.id, mode);
+    try { player.setDynamicProperty(NOTIFICATION_PROPERTY, mode); } catch {}
+}
+
+function plainText(value) {
+    return String(value).replace(/\u00A7[0-9a-fk-or]/gi, "");
+}
 
 // ─── Data Layer ───────────────────────────────────────────────────────────────
 
@@ -127,21 +285,6 @@ function getInventoryContainer(player) {
     return player.getComponent("minecraft:inventory")?.container;
 }
 
-function getHeldItem(player) {
-    const container = getInventoryContainer(player);
-    if (container && typeof player.selectedSlotIndex === "number") {
-        try {
-            return container.getItem(player.selectedSlotIndex);
-        } catch {}
-    }
-
-    try {
-        return player.getComponent("minecraft:equippable")?.getEquipment(EquipmentSlot.Mainhand);
-    } catch {}
-
-    return undefined;
-}
-
 function refundItem(player, itemStack) {
     if (!itemStack) return;
 
@@ -162,101 +305,6 @@ function refundItem(player, itemStack) {
 
 // ─── Visual Border ────────────────────────────────────────────────────────────
 
-function getSurfaceY(dim, x, z, refY) {
-    const top = Math.min(Math.floor(refY) + 8,  319);
-    const bot = Math.max(Math.floor(refY) - 64, -64);
-    try {
-        for (let y = top; y >= bot; y--) {
-            const b = dim.getBlock({ x: Math.floor(x), y, z: Math.floor(z) });
-            if (b && !b.isAir) return y + 1;
-        }
-    } catch {}
-    return Math.floor(refY) + 1;
-}
-
-function borderStyleForClaim(player, claim) {
-    return claim?.owner === player.id ? OWN_BORDER_STYLE : OTHER_BORDER_STYLE;
-}
-
-function showBorder(player, key, style = OWN_BORDER_STYLE) {
-    const { cx, cz } = chunkFromKey(key);
-    const x0 = cx * CHUNK_SIZE;
-    const z0 = cz * CHUNK_SIZE;
-    const refY = player.location.y;
-    const dim = player.dimension;
-    const claims = loadClaims();
-    const ownerId = claims[key]?.owner ?? null;
-
-    const sameOwner = (ncx, ncz) => ownerId && claims[`${ncx},${ncz}`]?.owner === ownerId;
-
-    const drawNorth = !sameOwner(cx,     cz - 1);
-    const drawSouth = !sameOwner(cx,     cz + 1);
-    const drawWest  = !sameOwner(cx - 1, cz);
-    const drawEast  = !sameOwner(cx + 1, cz);
-
-    // Sample Y at each edge midpoint — 4 reads per chunk, accurate on sloped terrain.
-    const mid = CHUNK_SIZE / 2;
-    const yN = drawNorth ? getSurfaceY(dim, x0 + mid, z0,                  refY) : refY;
-    const yS = drawSouth ? getSurfaceY(dim, x0 + mid, z0 + CHUNK_SIZE - 1, refY) : refY;
-    const yW = drawWest  ? getSurfaceY(dim, x0,                  z0 + mid, refY) : refY;
-    const yE = drawEast  ? getSurfaceY(dim, x0 + CHUNK_SIZE - 1, z0 + mid, refY) : refY;
-
-    const pt = (x, z, y) => {
-        try { dim.spawnParticle(style.edgeParticle,   { x: x + 0.5, y, z: z + 0.5 }); } catch {}
-    };
-    const corner = (x, z, ya, yb) => {
-        try { dim.spawnParticle(style.cornerParticle, { x: x + 0.5, y: (ya + yb) / 2, z: z + 0.5 }); } catch {}
-    };
-
-    for (let i = 0; i < CHUNK_SIZE; i += 2) {
-        if (drawNorth) pt(x0 + i, z0,                  yN);
-        if (drawSouth) pt(x0 + i, z0 + CHUNK_SIZE - 1, yS);
-        if (drawWest)  pt(x0,                  z0 + i, yW);
-        if (drawEast)  pt(x0 + CHUNK_SIZE - 1, z0 + i, yE);
-    }
-
-    if (drawNorth || drawWest) corner(x0,                  z0,                  yN, yW);
-    if (drawNorth || drawEast) corner(x0 + CHUNK_SIZE - 1, z0,                  yN, yE);
-    if (drawSouth || drawWest) corner(x0,                  z0 + CHUNK_SIZE - 1, yS, yW);
-    if (drawSouth || drawEast) corner(x0 + CHUNK_SIZE - 1, z0 + CHUNK_SIZE - 1, yS, yE);
-}
-
-function showBorders(player, keys, style = OWN_BORDER_STYLE) {
-    for (const key of keys) showBorder(player, key, style);
-}
-
-function showClaimRegion(player, key) {
-    const claim = loadClaims()[key];
-    if (!claim) return;
-    showBorders(player, getConnectedClaims(key, claim.owner), borderStyleForClaim(player, claim));
-}
-
-function showNearbyClaimBorders(player) {
-    const pos = player.location;
-    const pcx = Math.floor(pos.x / CHUNK_SIZE);
-    const pcz = Math.floor(pos.z / CHUNK_SIZE);
-    const claims = loadClaims();
-    const shown = new Set();
-    const currentKey = `${pcx},${pcz}`;
-
-    if (claims[currentKey]) {
-        showClaimRegion(player, currentKey);
-        return;
-    }
-
-    for (let dx = -PREVIEW_RADIUS_CHUNKS; dx <= PREVIEW_RADIUS_CHUNKS; dx++) {
-        for (let dz = -PREVIEW_RADIUS_CHUNKS; dz <= PREVIEW_RADIUS_CHUNKS; dz++) {
-            const nk = `${pcx + dx},${pcz + dz}`;
-            const claim = claims[nk];
-            if (!claim || shown.has(nk)) continue;
-
-            const connected = getConnectedClaims(nk, claim.owner);
-            for (const ck of connected) shown.add(ck);
-            showBorders(player, connected, borderStyleForClaim(player, claim));
-        }
-    }
-}
-
 // ─── Permission & Role Helpers ────────────────────────────────────────────────
 
 function isCoOwnerOfClaim(claim, playerId) {
@@ -266,6 +314,68 @@ function isCoOwnerOfClaim(claim, playerId) {
 function getEffectivePerms(claim, playerId) {
     const playerPerms = (claim.players ?? {})[playerId];
     return playerPerms ?? claim.permissions;
+}
+
+function getHudPermissions(claim, player) {
+    if (!claim) return "§7Permissions: §8N/A";
+    if (claim.owner === player.id) return "§7Permissions: §aFull access (Owner)";
+    if (isCoOwnerOfClaim(claim, player.id)) return "§7Permissions: §aFull access (Co-Owner)";
+
+    const perms = getEffectivePerms(claim, player.id);
+    const allowed = [
+        perms.breakBlocks && "Break",
+        perms.placeBlocks && "Place",
+        perms.openChests && "Containers",
+        perms.useDoors && "Doors/Gates",
+        perms.useButtons && "Buttons/Levers",
+        perms.explosions && "Explosions"
+    ].filter(Boolean);
+    return allowed.length > 0
+        ? `§7Permissions: §a${allowed.join(", ")}`
+        : "§7Permissions: §cNo guest actions";
+}
+
+function buildPersonalHud(player, key, claim) {
+    const ownedChunkCount = Object.values(loadClaims())
+        .filter((entry) => entry?.owner === player.id).length;
+    const lines = [
+        `§6§lChunkClaim §r§7| §f${player.name}`,
+        `§7Owned chunks: §a${ownedChunkCount} §8| §7Current: §f${key}`
+    ];
+
+    if (!claim) {
+        lines.push("§7Status: §aUnclaimed");
+        lines.push("§7Role: §8None");
+        return `CC_HUD:${lines.join("\n")}`;
+    }
+
+    const isOwner = claim.owner === player.id;
+    const isCoOwner = isCoOwnerOfClaim(claim, player.id);
+    const role = isOwner ? "§aOwner" : isCoOwner ? "§bCo-Owner" : "§cGuest";
+    const status = isOwner ? "§aYour claim" : `§cClaimed by §f${plainText(claim.ownerName)}`;
+
+    lines.push(`§7Status: ${status}`);
+    if (claim.regionName) lines.push(`§7Region: §6${plainText(claim.regionName)}`);
+    lines.push(`§7Role: ${role}`);
+    lines.push(getHudPermissions(claim, player));
+    return `CC_HUD:${lines.join("\n")}`;
+}
+
+function showPersonalHud(player, key, claim) {
+    try {
+        player.onScreenDisplay.setTitle(buildPersonalHud(player, key, claim), {
+            fadeInDuration: 0,
+            stayDuration: 0,
+            fadeOutDuration: 0
+        });
+    } catch {}
+}
+
+function removeLegacyChunkClaimScoreboard() {
+    try {
+        const objective = world.scoreboard.getObjective("chunkclaim_claims");
+        if (objective) world.scoreboard.removeObjective(objective);
+    } catch {}
 }
 
 function isAdmin(player) {
@@ -283,6 +393,92 @@ function broadcastToAdmins(message) {
 
 // ─── UI: Main Management Panel ───────────────────────────────────────────────
 
+async function openLanguageUI(player, returnTo) {
+    let result;
+    try {
+        const form = new ActionFormData()
+            .title(`§f§l${t(player, "languageTitle")}`)
+            .body(`§7${t(player, "languageBody")}`);
+        for (const language of LANGUAGE_OPTIONS) form.button(LANGUAGE_NAMES[language]);
+        form.button(t(player, "close"));
+        result = await form.show(player);
+    } catch { return; }
+
+    if (result.canceled || result.selection == null || result.selection >= LANGUAGE_OPTIONS.length) return;
+    const language = LANGUAGE_OPTIONS[result.selection];
+    _playerLanguages.set(player.id, language);
+    try { player.setDynamicProperty(LANGUAGE_PROPERTY, language); } catch {}
+    player.sendMessage(`§a${t(player, "languageSaved")}`);
+    if (returnTo) returnTo();
+}
+
+async function openNotificationUI(player, returnTo) {
+    let result;
+    try {
+        result = await new ActionFormData()
+            .title(t(player, "notificationTitle"))
+            .body(t(player, "notificationBody"))
+            .button(t(player, "notificationAll"))
+            .button(t(player, "notificationClaimed"))
+            .button(t(player, "notificationOff"))
+            .button(t(player, "close"))
+            .show(player);
+    } catch { return; }
+
+    if (result.canceled || result.selection == null || result.selection >= NOTIFICATION_MODES.length) return;
+    setNotificationMode(player, NOTIFICATION_MODES[result.selection]);
+    player.sendMessage(`§a${t(player, "notificationSaved")}`);
+    if (returnTo) returnTo();
+}
+
+function getStatusHudEnabled(player) {
+    const cached = _playerStatusHud.get(player.id);
+    if (cached !== undefined) return cached;
+    try {
+        const mode = player.getDynamicProperty(STATUS_HUD_PROPERTY);
+        if (STATUS_HUD_MODES.includes(mode)) {
+            const enabled = mode === "on";
+            _playerStatusHud.set(player.id, enabled);
+            return enabled;
+        }
+    } catch {}
+    return false;
+}
+
+function setStatusHudEnabled(player, enabled) {
+    _playerStatusHud.set(player.id, enabled);
+    try { player.setDynamicProperty(STATUS_HUD_PROPERTY, enabled ? "on" : "off"); } catch {}
+}
+
+// This screen deliberately contains only per-player preferences, so it is safe
+// to open anywhere without a Claim Stick or a claim selected.
+async function openPlayerSettingsUI(player) {
+    let result;
+    try {
+        result = await new ActionFormData()
+            .title("ChunkClaim Settings")
+            .body("Configure your personal ChunkClaim preferences.")
+            .button(t(player, "notifications"))
+            .button(t(player, "language"))
+            .button(`Land HUD: ${getStatusHudEnabled(player) ? "§aON" : "§cOFF"}`)
+            .button(t(player, "close"))
+            .show(player);
+    } catch { return; }
+
+    if (result.canceled || result.selection == null) return;
+    if (result.selection === 0) return openNotificationUI(player, () => openPlayerSettingsUI(player));
+    if (result.selection === 1) return openLanguageUI(player, () => openPlayerSettingsUI(player));
+    if (result.selection === 2) {
+        const enabled = !getStatusHudEnabled(player);
+        setStatusHudEnabled(player, enabled);
+        if (!enabled) player.onScreenDisplay.setTitle("CC_HUD:OFF", { fadeInDuration: 0, stayDuration: 0, fadeOutDuration: 0 });
+        player.sendMessage(enabled
+            ? "§a[ChunkClaim] Personal land HUD enabled."
+            : "§7[ChunkClaim] Personal land HUD disabled.");
+        return openPlayerSettingsUI(player);
+    }
+}
+
 async function openManagementUI(player, claim, key) {
     const connected = getConnectedClaims(key, claim.owner);
     const count     = connected.length;
@@ -293,44 +489,41 @@ async function openManagementUI(player, claim, key) {
 
     const on = (b) => b ? "§aON" : "§cOFF";
     const permLines = [
-        `§r§f  Break blocks:      ${on(p.breakBlocks)}`,
-        `§r§f  Place blocks:      ${on(p.placeBlocks)}`,
-        `§r§f  Open containers:   ${on(p.openChests)}`,
-        `§r§f  Use doors/gates:   ${on(p.useDoors)}`,
-        `§r§f  Buttons/levers:    ${on(p.useButtons)}`,
-        `§r§f  Explosions/TNT:    ${on(p.explosions)}`
+        `§r§f  ${t(player, "breakBlocks")}: ${on(p.breakBlocks)}`,
+        `§r§f  ${t(player, "placeBlocks")}: ${on(p.placeBlocks)}`,
+        `§r§f  ${t(player, "containers")}: ${on(p.openChests)}`,
+        `§r§f  ${t(player, "doors")}: ${on(p.useDoors)}`,
+        `§r§f  ${t(player, "buttons")}: ${on(p.useButtons)}`,
+        `§r§f  ${t(player, "explosions")}: ${on(p.explosions)}`
     ].join("\n");
 
     const regionName   = claim.regionName ? `§6${claim.regionName}` : null;
     const header       = regionName
         ? `${regionName} §7(${count} chunk${count !== 1 ? "s" : ""})`
         : count > 1 ? `§7Connected region: §f${count} chunks` : `§7Chunk: §f${key}`;
-    const coOwnerLine  = coOwners.length > 0 ? `\n§7Co-owners: §f${coOwners.length}` : "";
-    const lockLine     = locked ? `\n§c§lThis claim is LOCKED by an admin.` : "";
+    const coOwnerLine  = coOwners.length > 0 ? `\n§7${t(player, "coOwners")}: §f${coOwners.length}` : "";
+    const lockLine     = locked ? `\n§c§l${t(player, "locked")}` : "";
     const footer       = count > 1 ? `\n§7Edits apply to §fall ${count} connected chunks§7.` : "";
 
     const form = new ActionFormData()
-        .title("§6§lClaim Management")
-        .body(`${header}\n§7Owner: §a${claim.ownerName}${coOwnerLine}${lockLine}\n\n§7Guest permissions:\n${permLines}${footer}`);
+        .title(`§f§l${t(player, "claimManagement")}`)
+        .body(`${header}\n§7${t(player, "owner")}: §f${claim.ownerName}${coOwnerLine}${lockLine}\n\n§7${t(player, "guestPermissions")}:\n${permLines}${footer}`);
 
     const actions = [];
 
     if (isOwner && locked) {
-        form.button("§8Edit Guest Permissions §7[LOCKED]");
+        form.button(`${t(player, "editGuestPermissions")} [${t(player, "locked")}]`);
         actions.push(() => player.sendMessage("§c[ChunkClaim] This claim is locked. Contact an admin to unlock."));
     } else {
-        form.button("§2Edit Guest Permissions");
+        form.button(`${t(player, "editGuestPermissions")}`);
         actions.push(() => openPermissionsUI(player, claim, key, connected));
     }
 
-    form.button("§2Manage Players");
-    actions.push(() => openPlayerListUI(player, claim, key));
-
-    form.button("§2Manage Co-Owners");
-    actions.push(() => openCoOwnerUI(player, claim, key));
+    form.button(`${t(player, "managePeople")}`);
+    actions.push(() => openPeopleUI(player, claim, key));
 
     if (isOwner && !locked) {
-        form.button("§6✎ Name This Region");
+        form.button(`${t(player, "nameRegion")}`);
         actions.push(() => openNameRegionUI(player, claim, key, connected));
     }
 
@@ -339,22 +532,28 @@ async function openManagementUI(player, claim, key) {
         const wpShared = (claim.waypointAllowed ?? []).length;
         const wpAccess = wpPublic ? "§aPublic" : wpShared > 0 ? `§e${wpShared} shared` : "§7Private";
         const wpSet    = claim.waypoint ? "§aSet" : "§8None";
-        form.button(`§6⚑ Waypoint  §8(${wpSet}§8, ${wpAccess}§8)`);
+        form.button(plainText(`${t(player, "waypoint")} (${wpSet}, ${wpAccess})`));
         actions.push(() => openWaypointSettingsUI(player, claim, key, connected));
     }
 
-    form.button("§bMy Lands");
+    form.button(`${t(player, "myLands")}`);
     actions.push(() => openWaypointUI(player));
 
     if (isOwner && !locked) {
-        form.button(count > 1 ? `§4Unclaim All ${count} Chunks` : "§4Unclaim This Chunk");
+        form.button(count > 1 ? `Unclaim All ${count} Chunks` : "Unclaim This Chunk");
         actions.push(() => openUnclaimUI(player, key, connected));
     }
 
-    form.button("§6[?] Help & Guide");
+    form.button(`${t(player, "helpGuide")}`);
     actions.push(() => openGuideUI(player));
 
-    form.button("§c§l✕ Close");
+    form.button(`${t(player, "notifications")}`);
+    actions.push(() => openNotificationUI(player, () => openManagementUI(player, claim, key)));
+
+    form.button(`${t(player, "language")}`);
+    actions.push(() => openLanguageUI(player, () => openManagementUI(player, claim, key)));
+
+    form.button(`${t(player, "close")}`);
     actions.push(() => {});
 
     let result;
@@ -366,6 +565,24 @@ async function openManagementUI(player, claim, key) {
 
 // ─── UI: Permission Toggles ───────────────────────────────────────────────────
 
+async function openPeopleUI(player, claim, key) {
+    let result;
+    try {
+        result = await new ActionFormData()
+            .title(t(player, "managePeople"))
+            .body(t(player, "chooseManage"))
+            .button(t(player, "managePlayers"))
+            .button(t(player, "manageCoOwners"))
+            .button(t(player, "close"))
+            .show(player);
+    } catch { return; }
+
+    if (result.canceled || result.selection == null) return;
+    if (result.selection === 0) return openPlayerListUI(player, claim, key);
+    if (result.selection === 1) return openCoOwnerUI(player, claim, key);
+    openManagementUI(player, claim, key);
+}
+
 async function openPermissionsUI(player, claim, key, connectedKeys) {
     const p        = claim.permissions;
     const count    = connectedKeys.length;
@@ -374,13 +591,13 @@ async function openPermissionsUI(player, claim, key, connectedKeys) {
     let result;
     try {
         result = await new ModalFormData()
-            .title(`§6§lGuest Permissions${subtitle}`)
-            .toggle("Allow Breaking Blocks",                 p.breakBlocks)
-            .toggle("Allow Placing Blocks",                  p.placeBlocks)
-            .toggle("Allow Opening Containers / Chests",     p.openChests)
-            .toggle("Allow Using Doors / Gates / Trapdoors", p.useDoors)
-            .toggle("Allow Using Buttons / Levers",          p.useButtons)
-            .toggle("Allow TNT / Explosions",                p.explosions)
+            .title(`§f§l${t(player, "guestPermissions")}${subtitle}`)
+            .toggle(t(player, "allowBreaking"),              { defaultValue: p.breakBlocks })
+            .toggle(t(player, "allowPlacing"),               { defaultValue: p.placeBlocks })
+            .toggle(t(player, "allowContainers"),            { defaultValue: p.openChests })
+            .toggle(t(player, "allowDoors"),                 { defaultValue: p.useDoors })
+            .toggle(t(player, "allowButtons"),               { defaultValue: p.useButtons })
+            .toggle(t(player, "allowExplosions"),            { defaultValue: p.explosions })
             .show(player);
     } catch { return; }
 
@@ -404,7 +621,6 @@ async function openPermissionsUI(player, claim, key, connectedKeys) {
             ? `§a[ChunkClaim] Permissions updated for §f${updated} chunks§a.`
             : "§a[ChunkClaim] Permissions updated."
     );
-    showBorders(player, connectedKeys);
 }
 
 // ─── UI: Unclaim Confirmation ─────────────────────────────────────────────────
@@ -420,9 +636,9 @@ async function openUnclaimUI(player, key, connectedKeys) {
             pick = await new ActionFormData()
                 .title("§c§lUnclaim Land?")
                 .body(`§7This region has §f${count} chunks§7. What do you want to unclaim?\n\n§cGold Blocks are §lNOT§r§c refunded.`)
-                .button("§cJust This Chunk")
-                .button(`§4All ${count} Connected Chunks`)
-                .button("§c§l✕ Cancel")
+                .button("Just This Chunk")
+                .button(`All ${count} Connected Chunks`)
+                .button("✕ Cancel")
                 .show(player);
         } catch { return; }
 
@@ -438,8 +654,8 @@ async function openUnclaimUI(player, key, connectedKeys) {
         confirm = await new ActionFormData()
             .title("§c§lConfirm Unclaim")
             .body(`§cUnclaim ${target}?\n\n§cGold Blocks are §lNOT§r§c refunded.`)
-            .button("§cYes, Unclaim")
-            .button("§c§l✕ Cancel")
+            .button("Yes, Unclaim")
+            .button("✕ Cancel")
             .show(player);
     } catch { return; }
 
@@ -475,9 +691,9 @@ async function openPlayerListUI(player, claim, key) {
 
     for (const p of online) {
         const hasCustom = !!(claim.players ?? {})[p.id];
-        form.button(`${p.name}${hasCustom ? " §7[Custom]" : ""}`);
+        form.button(`${p.name}${hasCustom ? " [Custom]" : ""}`);
     }
-    form.button("§c§l✕ Close");
+    form.button("✕ Close");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -494,13 +710,13 @@ async function openPlayerPermissionsUI(player, claim, key, targetPlayer) {
     let result;
     try {
         result = await new ModalFormData()
-            .title(`§6§l${targetPlayer.name}'s Permissions`)
-            .toggle("Allow Breaking Blocks",                 existing.breakBlocks)
-            .toggle("Allow Placing Blocks",                  existing.placeBlocks)
-            .toggle("Allow Opening Containers / Chests",     existing.openChests)
-            .toggle("Allow Using Doors / Gates / Trapdoors", existing.useDoors)
-            .toggle("Allow Using Buttons / Levers",          existing.useButtons)
-            .toggle("Allow TNT / Explosions",                existing.explosions)
+            .title(`§f§l${targetPlayer.name}'s ${t(player, "guestPermissions")}`)
+            .toggle(t(player, "allowBreaking"),              { defaultValue: existing.breakBlocks })
+            .toggle(t(player, "allowPlacing"),               { defaultValue: existing.placeBlocks })
+            .toggle(t(player, "allowContainers"),            { defaultValue: existing.openChests })
+            .toggle(t(player, "allowDoors"),                 { defaultValue: existing.useDoors })
+            .toggle(t(player, "allowButtons"),               { defaultValue: existing.useButtons })
+            .toggle(t(player, "allowExplosions"),            { defaultValue: existing.explosions })
             .show(player);
     } catch { return; }
 
@@ -528,9 +744,9 @@ async function openCoOwnerUI(player, claim, key) {
     const form = new ActionFormData()
         .title("§6§lManage Co-Owners")
         .body(`§7Current co-owners: §f${coOwnerNames}`)
-        .button("§2Add Co-Owner")
-        .button("§4Remove Co-Owner")
-        .button("§c§l✕ Close");
+        .button("Add Co-Owner")
+        .button("Remove Co-Owner")
+        .button("Close");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -554,7 +770,7 @@ async function openAddCoOwnerUI(player, claim, key, connected) {
         .body("§7Select a player to add as co-owner.");
 
     for (const p of candidates) form.button(p.name);
-    form.button("§7Back");
+    form.button("Back");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -587,7 +803,7 @@ async function openRemoveCoOwnerUI(player, claim, key, connected) {
         .body("§7Select a co-owner to remove.");
 
     for (const co of coOwners) form.button(co.name);
-    form.button("§7Back");
+    form.button("Back");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -620,13 +836,13 @@ async function openAdminUI(player, claim, key) {
     const actions = [];
 
     if (hasClaim) {
-        form.button("§eView Claim Info");
+        form.button("View Claim Info");
         actions.push(() => openAdminViewInfoUI(player, claim, key));
 
-        form.button("§4Delete This Claim");
+        form.button("Delete This Claim");
         actions.push(() => openAdminDeleteClaimUI(player, claim, key));
 
-        form.button("§bTeleport to Claim");
+        form.button("Teleport to Claim");
         actions.push(() => {
             const { cx, cz } = chunkFromKey(key);
             const cx16 = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
@@ -640,11 +856,11 @@ async function openAdminUI(player, claim, key) {
             }
         });
 
-        form.button("§dForce Add Co-Owner");
+        form.button("Force Add Co-Owner");
         actions.push(() => openAdminForceCoOwnerUI(player, claim, key));
 
         const lockLabel = claim.locked ? "§6Toggle Claim Lock §7(§cLOCKED§7)" : "§6Toggle Claim Lock §7(§aUNLOCKED§7)";
-        form.button(lockLabel);
+        form.button(plainText(lockLabel));
         actions.push(() => {
             const connected  = getConnectedClaims(key, claim.owner);
             const claims     = loadClaims();
@@ -659,16 +875,16 @@ async function openAdminUI(player, claim, key) {
         });
     }
 
-    form.button("§bBrowse Player Lands");
+    form.button("Browse Player Lands");
     actions.push(() => openAdminBrowseLandsUI(player));
 
-    form.button("§4Delete All Claims By Player");
+    form.button("Delete All Claims By Player");
     actions.push(() => openAdminDeleteByPlayerUI(player));
 
-    form.button("§6[?] Help & Guide");
+    form.button("[?] Help & Guide");
     actions.push(() => openGuideUI(player));
 
-    form.button("§c§l✕ Close");
+    form.button("✕ Close");
     actions.push(() => {});
 
     let result;
@@ -707,7 +923,7 @@ async function openAdminViewInfoUI(player, claim, key) {
                 `§7Custom player perms: §f${playerPermCount}\n\n` +
                 `§7Guest permissions:\n${permText}`
             )
-            .button("§c§l✕ Close")
+            .button("✕ Close")
             .show(player);
     } catch {}
 }
@@ -720,8 +936,8 @@ async function openAdminDeleteClaimUI(player, claim, key) {
         result = await new ActionFormData()
             .title("§c§lDelete Claim?")
             .body(`§cDelete §f${claim.ownerName}§c's claim at §f${key}§c?\n§7This removes §f${connected.length} chunk(s)§7. No gold refunded.`)
-            .button("§cYes, Delete")
-            .button("§7Cancel")
+            .button("Yes, Delete")
+            .button("Cancel")
             .show(player);
     } catch { return; }
 
@@ -760,9 +976,9 @@ async function openAdminDeleteByPlayerUI(player) {
         .body("§7Select a player to wipe all their claims.");
 
     for (const [, { name, count }] of owners) {
-        form.button(`${name} §7(${count} chunk${count !== 1 ? "s" : ""})`);
+        form.button(`${name} (${count} chunk${count !== 1 ? "s" : ""})`);
     }
-    form.button("§7Cancel");
+    form.button("Cancel");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -776,8 +992,8 @@ async function openAdminDeleteByPlayerUI(player) {
         confirm = await new ActionFormData()
             .title("§c§lConfirm Wipe")
             .body(`§cDelete §lALL §r§c${targetCount} claim(s) by §f${targetName}§c?\n§7This cannot be undone.`)
-            .button("§cYes, Wipe All")
-            .button("§7Cancel")
+            .button("Yes, Wipe All")
+            .button("Cancel")
             .show(player);
     } catch { return; }
 
@@ -808,7 +1024,7 @@ async function openAdminForceCoOwnerUI(player, claim, key) {
         .body(`§7Adding co-owner to §f${claim.ownerName}§7's claim at §f${key}§7.`);
 
     for (const p of candidates) form.button(p.name);
-    form.button("§7Cancel");
+    form.button("Cancel");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -839,7 +1055,7 @@ async function openNameRegionUI(player, claim, key, connected) {
     try {
         result = await new ModalFormData()
             .title("§6§lName This Region")
-            .textField("Region name (leave blank to clear)", "e.g. My Base", claim.regionName ?? "")
+            .textField("Region name (leave blank to clear)", "e.g. My Base", { defaultValue: claim.regionName ?? "" })
             .show(player);
     } catch { return; }
 
@@ -888,8 +1104,8 @@ async function openSetWaypointUI(player, claim, key, connected) {
                 `§fX: §7${fx}  Y: §7${fy}  Z: §7${fz}\n\n` +
                 `§8Players will land here when using §7My Lands§8.`
             )
-            .button("§aSet Waypoint Here")
-            .button("§c§l✕ Cancel")
+            .button("Set Waypoint Here")
+            .button("✕ Cancel")
             .show(player);
     } catch { return; }
 
@@ -920,9 +1136,9 @@ async function openWaypointSettingsUI(player, claim, key, connected) {
                 `§7Waypoint: ${claim.waypoint ? "§aSet" : "§8Not set"}\n` +
                 `§7Access: ${wpAccess}`
             )
-            .button("§6⚑ Set Waypoint Here")
-            .button(`§6⬡ Waypoint Access  ${wpAccess}`)
-            .button("§c§l✕ Close")
+            .button("⚑ Set Waypoint Here")
+            .button(plainText(`⬡ Waypoint Access  ${wpAccess}`))
+            .button("✕ Close")
             .show(player);
     } catch { return; }
 
@@ -947,10 +1163,10 @@ async function openWaypointAccessUI(player, claim, key, connected) {
                 `§7Public (anyone): ${on(isPublic)}\n` +
                 `§7Shared with: §f${allowed.length} player${allowed.length !== 1 ? "s" : ""}`
             )
-            .button(isPublic ? "§4Make Private" : "§2Make Public  §7(anyone can TP)")
-            .button("§aGrant Access to Player")
-            .button(`§cRevoke Player Access ${allowed.length > 0 ? `§7(${allowed.length})` : ""}`)
-            .button("§c§l✕ Close")
+            .button(isPublic ? "Make Private" : "Make Public  (anyone can TP)")
+            .button("Grant Access to Player")
+            .button(`Revoke Player Access ${allowed.length > 0 ? `(${allowed.length})` : ""}`)
+            .button("✕ Close")
             .show(player);
     } catch { return; }
 
@@ -995,7 +1211,7 @@ async function openAddWaypointAccessUI(player, claim, key, connected) {
         .body("§7Select a player to let them teleport to this region via My Lands.");
 
     for (const p of candidates) form.button(p.name);
-    form.button("§7Back");
+    form.button("Back");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -1022,7 +1238,7 @@ async function openRevokeWaypointAccessUI(player, claim, key, connected) {
         .body("§7Select a player to remove their teleport access.");
 
     for (const p of allowed) form.button(p.name);
-    form.button("§7Back");
+    form.button("Back");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -1151,10 +1367,10 @@ async function openWaypointUI(player) {
         const { keys, claim, role } = regions[i];
         const label   = claim.regionName ?? `Region ${i + 1}`;
         const roleTag = role === "coOwner" ? ` §8[${claim.ownerName}]` : "";
-        form.button(`§f${label}${roleTag} §7(${keys.length} chunk${keys.length !== 1 ? "s" : ""})`);
+        form.button(plainText(`${label}${roleTag} (${keys.length} chunk${keys.length !== 1 ? "s" : ""})`));
     }
-    form.button("§b↗ Shared & Public Waypoints");
-    form.button("§c§l✕ Close");
+    form.button("↗ Shared & Public Waypoints");
+    form.button("✕ Close");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -1190,10 +1406,10 @@ async function openSharedWaypointsUI(player) {
         const { keys, claim, role } = regions[i];
         const label   = claim.regionName ?? `${claim.ownerName}'s Land`;
         const roleTag = role === "public" ? " §8(Public)" : " §8(Shared with you)";
-        form.button(`§f${label} §7[${claim.ownerName}]${roleTag} §7(${keys.length} chunk${keys.length !== 1 ? "s" : ""})`);
+        form.button(plainText(`${label} [${claim.ownerName}]${roleTag} (${keys.length} chunk${keys.length !== 1 ? "s" : ""})`));
     }
-    form.button("§7◀ My Lands");
-    form.button("§c§l✕ Close");
+    form.button("◀ My Lands");
+    form.button("✕ Close");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -1232,9 +1448,9 @@ async function openAdminBrowseLandsUI(player) {
         .body("§7Select a player to view their regions:");
 
     for (const [, { name, count }] of owners) {
-        form.button(`§f${name} §7(${count} chunk${count !== 1 ? "s" : ""})`);
+        form.button(`${name} (${count} chunk${count !== 1 ? "s" : ""})`);
     }
-    form.button("§c§l✕ Close");
+    form.button("✕ Close");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -1259,10 +1475,10 @@ async function openAdminPlayerLandsUI(player, ownerId, ownerName) {
     for (let i = 0; i < regions.length; i++) {
         const { keys, claim } = regions[i];
         const label = claim.regionName ?? `Region ${i + 1}`;
-        form.button(`§f${label} §7(${keys.length} chunk${keys.length !== 1 ? "s" : ""})`);
+        form.button(`${label} (${keys.length} chunk${keys.length !== 1 ? "s" : ""})`);
     }
-    form.button("§7◀ Back");
-    form.button("§c§l✕ Close");
+    form.button("◀ Back");
+    form.button("✕ Close");
 
     let result;
     try { result = await form.show(player); } catch { return; }
@@ -1324,7 +1540,7 @@ const GUIDE_TOPICS = [
     },
     {
         title: "§6Unclaiming Land",
-        body:  "§f1. Open Management UI\n2. Tap the §cUnclaim §fbutton\n3. Confirm\n\n§c§lGold is NOT refunded!\n\n§fConnected chunks can be unclaimed all at once.\n\n§aGood luck and happy building!\n§7— Silverfox0338 / ChunkClaim v1.9.0"
+        body:  "§f1. Open Management UI\n2. Tap the §cUnclaim §fbutton\n3. Confirm\n\n§c§lGold is NOT refunded!\n\n§fConnected chunks can be unclaimed all at once.\n\n§aGood luck and happy building!\n§7— Silverfox0338 / ChunkClaim v1.9.2"
     }
 ];
 
@@ -1351,12 +1567,18 @@ async function openGuideUI(player) {
         .title("§6§lChunkClaim Guide")
         .body("§7Select a topic to learn more:");
 
-    for (const t of allTopics) form.button(t.title);
-    form.button("§c§l✕ Close");
+    for (const t of allTopics) form.button(plainText(t.title));
+    form.button(`${t(player, "language")}`);
+    form.button(`${t(player, "close")}`);
 
     let result;
     try { result = await form.show(player); } catch { return; }
-    if (result.canceled || result.selection == null || result.selection >= allTopics.length) return;
+    if (result.canceled || result.selection == null) return;
+    if (result.selection === allTopics.length) {
+        openLanguageUI(player, () => openGuideUI(player));
+        return;
+    }
+    if (result.selection > allTopics.length) return;
 
     openGuideTopic(player, allTopics[result.selection]);
 }
@@ -1367,8 +1589,8 @@ async function openGuideTopic(player, topic) {
         result = await new ActionFormData()
             .title(topic.title)
             .body(topic.body)
-            .button("§7◀ Back to Guide")
-            .button("§c§l✕ Close")
+            .button("◀ Back to Guide")
+            .button("✕ Close")
             .show(player);
     } catch { return; }
 
@@ -1406,7 +1628,6 @@ async function handleStickUse(player, sneaking = false) {
         if (claim.owner === player.id || isCoOwnerOfClaim(claim, player.id)) {
             openManagementUI(player, claim, key);
         } else {
-            showClaimRegion(player, key);
             const rn = claim.regionName;
             const title = rn ? `§6${rn} §7[${key}]` : `§7Chunk §f${key}`;
             let choice;
@@ -1414,8 +1635,8 @@ async function handleStickUse(player, sneaking = false) {
                 choice = await new ActionFormData()
                     .title("§cClaimed Land")
                     .body(`${title}\n§7Owner: §f${claim.ownerName}\n\n§7You do not have permission to manage this chunk.`)
-                    .button("§bMy Lands")
-                    .button("§c§l✕ Close")
+                    .button("My Lands")
+                    .button("✕ Close")
                     .show(player);
             } catch { return; }
             if (!choice.canceled && choice.selection === 0) openWaypointUI(player);
@@ -1429,9 +1650,9 @@ async function handleStickUse(player, sneaking = false) {
         choice = await new ActionFormData()
             .title("§6§lUnclaimed Land")
             .body(`§7Chunk §f${key}§7 is unclaimed.\n\nWhat would you like to do?`)
-            .button(`§2✔ Claim This Chunk  §8(${GOLD_COST}x Gold Block)`)
-            .button("§bMy Lands")
-            .button("§c§l✕ Cancel")
+            .button(`Claim This Chunk (${GOLD_COST}x Gold Block)`)
+            .button("My Lands")
+            .button("Cancel")
             .show(player);
     } catch { return; }
 
@@ -1466,7 +1687,6 @@ async function handleStickUse(player, sneaking = false) {
     saveClaims(claims);
 
     player.sendMessage(`§a[ChunkClaim] Claimed §f${key}§a! Cost: §f${GOLD_COST}x Gold Block§a.`);
-    showClaimRegion(player, key);
 }
 
 // ─── Item Events ──────────────────────────────────────────────────────────────
@@ -1478,12 +1698,17 @@ world.beforeEvents.itemUse.subscribe((ev) => {
     system.run(() => handleStickUse(ev.source, sneaking));
 });
 
-world.beforeEvents.itemUseOn.subscribe((ev) => {
-    if (ev.itemStack?.typeId !== CLAIM_STICK_ID) return;
-    ev.cancel = true;
-    const sneaking = _sneakState.get(ev.source.id) ?? ev.source.isSneaking;
-    system.run(() => handleStickUse(ev.source, sneaking));
-});
+// `itemUseOn` was removed from WorldBeforeEvents in Script API 2.x. Keep this
+// optional for older runtimes; `itemUse` above handles current 2.x clients.
+const itemUseOnBefore = world.beforeEvents.itemUseOn;
+if (itemUseOnBefore) {
+    itemUseOnBefore.subscribe((ev) => {
+        if (ev.itemStack?.typeId !== CLAIM_STICK_ID) return;
+        ev.cancel = true;
+        const sneaking = _sneakState.get(ev.source.id) ?? ev.source.isSneaking;
+        system.run(() => handleStickUse(ev.source, sneaking));
+    });
+}
 
 // ─── Protection: Block Breaking ───────────────────────────────────────────────
 
@@ -1599,7 +1824,142 @@ system.runInterval(() => {
 // ─── Interval: Chunk Entry + Auto Border While Holding Stick ─────────────────
 
 const _lastChunk      = new Map();
-const _lastBorderShow = new Map();
+
+// Native slash commands. Bedrock requires custom commands to be namespaced;
+// registering both namespaces provides the short /cc:... spelling as well.
+function getCommandPlayer(origin) {
+    const source = origin.initiator ?? origin.sourceEntity;
+    return source instanceof Player ? source : undefined;
+}
+
+function helpCommand(origin) {
+    const player = getCommandPlayer(origin);
+    if (!player) {
+        return {
+            status: CustomCommandStatus.Failure,
+            message: "This command can only be used by a player."
+        };
+    }
+
+    system.run(() => openGuideUI(player));
+    return {
+        status: CustomCommandStatus.Success
+    };
+}
+
+function openSettingsCommand(origin) {
+    const player = getCommandPlayer(origin);
+    if (!player) {
+        return {
+            status: CustomCommandStatus.Failure,
+            message: "This command can only be used by a player."
+        };
+    }
+    system.run(() => openPlayerSettingsUI(player));
+    return { status: CustomCommandStatus.Success };
+}
+
+function setNotificationCommand(origin, mode) {
+    const player = getCommandPlayer(origin);
+    if (!player) {
+        return {
+            status: CustomCommandStatus.Failure,
+            message: "This command can only be used by a player."
+        };
+    }
+    if (!NOTIFICATION_MODES.includes(mode)) {
+        return { status: CustomCommandStatus.Failure, message: "Invalid notification mode." };
+    }
+    system.run(() => {
+        setNotificationMode(player, mode);
+        player.sendMessage(`§a${t(player, "notificationSaved")}`);
+    });
+    return { status: CustomCommandStatus.Success };
+}
+
+function setStatusHudCommand(origin, mode) {
+    const player = getCommandPlayer(origin);
+    if (!player) {
+        return {
+            status: CustomCommandStatus.Failure,
+            message: "This command can only be used by a player."
+        };
+    }
+    if (!STATUS_HUD_MODES.includes(mode)) {
+        return { status: CustomCommandStatus.Failure, message: "Invalid HUD mode." };
+    }
+    system.run(() => {
+        const enabled = mode === "on";
+        setStatusHudEnabled(player, enabled);
+        if (!enabled) player.onScreenDisplay.setTitle("CC_HUD:OFF", { fadeInDuration: 0, stayDuration: 0, fadeOutDuration: 0 });
+        player.sendMessage(enabled
+            ? "§a[ChunkClaim] Personal land HUD enabled."
+            : "§7[ChunkClaim] Personal land HUD disabled.");
+    });
+    return { status: CustomCommandStatus.Success };
+}
+
+const startupEvent = system.beforeEvents?.startup ?? world.beforeEvents?.startup;
+
+if (startupEvent) {
+    startupEvent.subscribe((init) => {
+        const registry = init?.customCommandRegistry;
+        if (!registry?.registerCommand) return;
+
+        // Register enums once
+        registry.registerEnum("chunkclaim:notification_mode", NOTIFICATION_MODES);
+        registry.registerEnum("chunkclaim:status_hud_mode", STATUS_HUD_MODES);
+
+        // Register commands with chunkclaim namespace only
+        registry.registerCommand(
+            {
+                name: "chunkclaim:help",
+                description: "Open the ChunkClaim guide",
+                permissionLevel: CommandPermissionLevel.Any,
+                cheatsRequired: false
+            },
+            helpCommand
+        );
+
+        registry.registerCommand(
+            {
+                name: "chunkclaim:settings",
+                description: "Open your ChunkClaim settings",
+                permissionLevel: CommandPermissionLevel.Any,
+                cheatsRequired: false
+            },
+            openSettingsCommand
+        );
+
+        registry.registerCommand(
+            {
+                name: "chunkclaim:notify",
+                description: "Set your ChunkClaim land-notification preference",
+                permissionLevel: CommandPermissionLevel.Any,
+                cheatsRequired: false,
+                mandatoryParameters: [
+                    { name: "chunkclaim:notification_mode", type: CustomCommandParamType.Enum }
+                ]
+            },
+            setNotificationCommand
+        );
+
+        registry.registerCommand(
+            {
+                name: "chunkclaim:hud",
+                description: "Toggle the personal ChunkClaim land-status HUD",
+                permissionLevel: CommandPermissionLevel.Any,
+                cheatsRequired: false,
+                mandatoryParameters: [
+                    { name: "chunkclaim:status_hud_mode", type: CustomCommandParamType.Enum }
+                ]
+            },
+            setStatusHudCommand
+        );
+    });
+}
+
+system.run(removeLegacyChunkClaimScoreboard);
 
 system.runInterval(() => {
     for (const player of world.getAllPlayers()) {
@@ -1609,29 +1969,27 @@ system.runInterval(() => {
         if (_lastChunk.get(player.id) !== key) {
             _lastChunk.set(player.id, key);
             const claim = loadClaims()[key];
+            const notificationMode = getNotificationMode(player);
             if (claim) {
-                const rn = claim.regionName;
-                if (claim.owner === player.id) {
-                    player.onScreenDisplay.setActionBar(rn ? `§aYour Land: §6${rn} §7[${key}]` : `§aYour Claim §7[${key}]`);
-                } else if (isCoOwnerOfClaim(claim, player.id)) {
-                    player.onScreenDisplay.setActionBar(rn ? `§aCo-Owner of §6${rn} §7[${key}]` : `§aYou are a Co-Owner §7[${key}]`);
-                } else {
-                    player.onScreenDisplay.setActionBar(rn ? `§c${claim.ownerName}§f: §6${rn} §7[${key}]` : `§cClaimed by §f${claim.ownerName} §7[${key}]`);
+                if (notificationMode !== "off") {
+                    const rn = claim.regionName;
+                    if (claim.owner === player.id) {
+                        player.onScreenDisplay.setActionBar(rn ? `§aYour Land: §6${rn} §7[${key}]` : `§aYour Claim §7[${key}]`);
+                    } else if (isCoOwnerOfClaim(claim, player.id)) {
+                        player.onScreenDisplay.setActionBar(rn ? `§aCo-Owner of §6${rn} §7[${key}]` : `§aYou are a Co-Owner §7[${key}]`);
+                    } else {
+                        player.onScreenDisplay.setActionBar(rn ? `§c${claim.ownerName}§f: §6${rn} §7[${key}]` : `§cClaimed by §f${claim.ownerName} §7[${key}]`);
+                    }
                 }
-                showClaimRegion(player, key);
-            } else {
+            } else if (notificationMode === "all") {
                 player.onScreenDisplay.setActionBar("§7Unclaimed land");
             }
         }
 
-        const now = Date.now();
-        if (now - (_lastBorderShow.get(player.id) ?? 0) < BORDER_PREVIEW_INTERVAL_MS) continue;
-
-        const held = getHeldItem(player);
-        if (held?.typeId !== CLAIM_STICK_ID) continue;
-
-        _lastBorderShow.set(player.id, now);
-        showNearbyClaimBorders(player);
+        if (getStatusHudEnabled(player)) {
+            const claim = loadClaims()[key];
+            showPersonalHud(player, key, claim);
+        }
     }
 }, 10);
 
@@ -1639,7 +1997,9 @@ system.runInterval(() => {
 
 world.afterEvents.playerLeave.subscribe((ev) => {
     _lastChunk.delete(ev.playerId);
-    _lastBorderShow.delete(ev.playerId);
+    _playerLanguages.delete(ev.playerId);
+    _playerNotifications.delete(ev.playerId);
+    _playerStatusHud.delete(ev.playerId);
     _recentUse.delete(ev.playerId);
     _sneakState.delete(ev.playerId);
 });

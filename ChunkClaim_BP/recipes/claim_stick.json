@@ -6,15 +6,20 @@
     },
     "tags": ["crafting_table"],
     "unlock": [
-      { "item": "minecraft:gold_block" }
+      { "item": "minecraft:compass" }
     ],
     "pattern": [
-      "G G",
-      " S "
+      "IPI",
+      "GCG",
+      "SRS"
     ],
     "key": {
-      "G": { "item": "minecraft:gold_block" },
-      "S": { "item": "minecraft:stick" }
+      "I": { "item": "minecraft:iron_ingot" },
+      "P": { "item": "minecraft:paper" },
+      "G": { "item": "minecraft:gold_ingot" },
+      "C": { "item": "minecraft:compass" },
+      "S": { "item": "minecraft:stick" },
+      "R": { "item": "minecraft:redstone" }
     },
     "result": {
       "item": "chunkclaim:claim_stick",

@@ -2,7 +2,14 @@
 
 > A land-claiming add-on for Minecraft Bedrock Edition — protect your 16×16 chunk regions, control who can build, and manage your land from a clean in-game UI.
 
-**Version 1.9.0** · Requires Bedrock 1.21.0+ · Made by [Silverfox0338](https://github.com/Silverfox0338)
+**Version 1.9.2** · Requires Bedrock 1.21.100+ · Made by [Silverfox0338](https://github.com/Silverfox0338)
+
+### Current release highlights
+- Claim and manage protected chunks with the Claim Stick
+- Use guest permissions, per-player overrides, and co-owner roles
+- Teleport between your land with My Lands and shared waypoints
+- Personal land-status HUD, notification controls, and `/chunkclaim` commands
+- Ready-to-use packaged artifacts are included in this repository as `.mcaddon` and `.mcpack` files
 
 ---
 
@@ -21,7 +28,7 @@ Claims protect the **entire column** from bedrock to sky. Data is saved automati
 3. Open or create a world → **Add-Ons** → enable:
    - ✅ ChunkClaim – Behavior Pack
    - ✅ ChunkClaim – Resource Pack
-4. Under **Experiments**, enable **Beta APIs**.
+4. Under **Experiments**, enable **Beta APIs** if your build requires it for script-based add-ons.
 5. Launch the world. You're good to go.
 
 **Bedrock Dedicated Server (BDS):**
@@ -36,11 +43,12 @@ Claims protect the **entire column** from bedrock to sky. Data is saved automati
 The **Claim Stick** is your only tool. Craft it at a crafting table:
 
 ```
-[ Gold Block ] [   Air   ] [ Gold Block ]
-[    Air    ] [  Stick  ] [    Air     ]
+[ Iron ] [ Paper ] [ Iron ]
+[ Gold ] [ Compass ] [ Gold ]
+[ Stick ] [ Redstone ] [ Stick ]
 ```
 
-- Costs **2 Gold Blocks + 1 Stick**
+- Costs **9 ingredients**: 2 Iron Ingots, Paper, 2 Gold Ingots, Compass, 2 Sticks, and Redstone
 - Shows as an enchanted stick with a purple glint
 - Max stack size of 1
 
@@ -217,6 +225,19 @@ Owners and co-owners always bypass all restrictions in their own claims.
 | Remove a chunk from your claim | Management UI → Unclaim → Just This Chunk |
 
 ---
+
+## Commands & Scoreboard
+
+These commands require Bedrock **1.21.100+**:
+
+| Command | What it does |
+|---|---|
+| `/chunkclaim:help` | Opens the in-game guide |
+| `/chunkclaim:settings` | Opens your personal ChunkClaim settings |
+| `/chunkclaim:notify <all|claimed|off>` | Sets land-status notifications |
+| `/chunkclaim:hud <on|off>` | Shows or hides your personal land-status HUD |
+
+The personal HUD shows your owned-chunk count, current chunk, claim status, region name, role, and allowed actions.
 
 ## License
 
